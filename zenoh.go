@@ -124,22 +124,27 @@ func (z *Zenoh) DeclareSubscriber(resource string, mode SubMode, callback Subscr
 	defer C.free(unsafe.Pointer(r))
 
 	subReg.mu.Lock()
+	defer subReg.mu.Unlock()
 	subReg.index++
 	for subReg.fns[subReg.index] != nil {
 		subReg.index++
 	}
 	subReg.fns[subReg.index] = callback
-	subReg.mu.Unlock()
 
 	// Note: 'arg' parameter is used to store the index of callback in subReg.fns. Don't use it as a real C memory address !!
 	result := C.z_declare_subscriber(z, r, &mode,
 		(C.subscriber_callback_t)(unsafe.Pointer(C.subscriber_callback_cgo)),
 		unsafe.Pointer(uintptr(subReg.index)))
 	if result.tag == C.Z_ERROR_TAG {
+		delete(subReg.fns, subReg.index)
 		return nil, &ZError{"z_declare_subscriber for " + resource + " failed", resultValueToErrorCode(result.value)}
 	}
 
-	return resultValueToSubscriber(result.value), nil
+	sub := new(Subscriber)
+	sub.zsub = resultValueToSubscriber(result.value)
+	sub.regIndex = subReg.index
+
+	return sub, nil
 }
 
 // DeclarePublisher declares a Publisher on a resource
@@ -215,16 +220,20 @@ func (z *Zenoh) WriteDataWO(resource string, payload []byte, encoding int, kind 
 //
 
 // UndeclareSubscriber a Subscriber
-func UndeclareSubscriber(s *Subscriber) error {
-	result := C.z_undeclare_subscriber(s)
+func (z *Zenoh) UndeclareSubscriber(s *Subscriber) error {
+	result := C.z_undeclare_subscriber(s.zsub)
 	if result != 0 {
 		return &ZError{"z_undeclare_subscriber failed", int(result)}
 	}
+	subReg.mu.Lock()
+	delete(subReg.fns, s.regIndex)
+	subReg.mu.Unlock()
+
 	return nil
 }
 
 // UndeclarePublisher a Publisher
-func UndeclarePublisher(p *Publisher) error {
+func (z *Zenoh) UndeclarePublisher(p *Publisher) error {
 	result := C.z_undeclare_publisher(p)
 	if result != 0 {
 		return &ZError{"z_undeclare_publisher failed", int(result)}
@@ -240,7 +249,10 @@ func UndeclarePublisher(p *Publisher) error {
 type Zenoh = C.z_zenoh_t
 
 // Subscriber is a Zenoh subscriber
-type Subscriber = C.z_sub_t
+type Subscriber struct {
+	regIndex int
+	zsub     *C.z_sub_t
+}
 
 // Publisher is a Zenoh publisher
 type Publisher = C.z_pub_t
@@ -342,12 +354,12 @@ func resultValueToPublisher(cbytes [8]byte) *Publisher {
 }
 
 // resultValueToSubscriber gets the Subscriber (z_sub_t) from a z_sub_p_result_t.value (union type)
-func resultValueToSubscriber(cbytes [8]byte) *Subscriber {
+func resultValueToSubscriber(cbytes [8]byte) *C.z_sub_t {
 	buf := bytes.NewBuffer(cbytes[:])
 	var ptr uint64
 	if err := binary.Read(buf, binary.LittleEndian, &ptr); err == nil {
 		uptr := uintptr(ptr)
-		return (*Subscriber)(unsafe.Pointer(uptr))
+		return (*C.z_sub_t)(unsafe.Pointer(uptr))
 	}
 	return nil
 }
