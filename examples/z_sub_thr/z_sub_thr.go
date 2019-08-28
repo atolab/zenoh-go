@@ -27,7 +27,6 @@ func listener(rid string, data []byte, info *zenoh.DataInfo) {
 	} else if count < n {
 		count++
 	} else {
-		fmt.Println()
 		stop = time.Now()
 		printStats(start, stop)
 		count = 0

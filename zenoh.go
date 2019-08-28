@@ -11,7 +11,7 @@ package zenoh
 #include <zenoh/recv_loop.h>
 
 // Forward declarations of callbacks (see callbacks.go)
-void subscriber_callback_cgo(const z_resource_id_t *rid, const unsigned char *data, size_t length, const z_data_info_t *info, void *arg);
+extern void subscriber_callback_cgo(const z_resource_id_t *rid, const unsigned char *data, size_t length, const z_data_info_t *info, void *arg);
 
 */
 import "C"
@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"unsafe"
 )
 
@@ -91,8 +92,16 @@ func (z *Zenoh) Info() map[string]string {
 	return info
 }
 
+type subscriberCallbackRegistry struct {
+	mu    *sync.Mutex
+	index int
+	fns   map[int]SubscriberCallback
+}
+
+var subReg = subscriberCallbackRegistry{new(sync.Mutex), 0, make(map[int]SubscriberCallback)}
+
 //export callSubscriberCallback
-func callSubscriberCallback(rid *C.z_resource_id_t, data unsafe.Pointer, length C.size_t, info *C.z_data_info_t, callbackPtr unsafe.Pointer) {
+func callSubscriberCallback(rid *C.z_resource_id_t, data unsafe.Pointer, length C.size_t, info *C.z_data_info_t, arg unsafe.Pointer) {
 	var rname string
 	if rid.kind == C.Z_STR_RES_ID {
 		rname = resIDToRName(rid.id)
@@ -103,8 +112,10 @@ func callSubscriberCallback(rid *C.z_resource_id_t, data unsafe.Pointer, length 
 
 	dataSlice := C.GoBytes(data, C.int(length))
 
-	goCallback := (*SubscriberCallback)(callbackPtr)
-	(*goCallback)(rname, dataSlice, info)
+	// Note: 'arg' parameter is used to store the index of callback in subReg.fns. Don't use it as a real C memory address !!
+	index := uintptr(arg)
+	goCallback := subReg.fns[int(index)]
+	goCallback(rname, dataSlice, info)
 }
 
 // DeclareSubscriber declares a Subscriber on a resource
@@ -112,9 +123,18 @@ func (z *Zenoh) DeclareSubscriber(resource string, mode SubMode, callback Subscr
 	r := C.CString(resource)
 	defer C.free(unsafe.Pointer(r))
 
+	subReg.mu.Lock()
+	subReg.index++
+	for subReg.fns[subReg.index] != nil {
+		subReg.index++
+	}
+	subReg.fns[subReg.index] = callback
+	subReg.mu.Unlock()
+
+	// Note: 'arg' parameter is used to store the index of callback in subReg.fns. Don't use it as a real C memory address !!
 	result := C.z_declare_subscriber(z, r, &mode,
 		(C.subscriber_callback_t)(unsafe.Pointer(C.subscriber_callback_cgo)),
-		unsafe.Pointer(&callback))
+		unsafe.Pointer(uintptr(subReg.index)))
 	if result.tag == C.Z_ERROR_TAG {
 		return nil, &ZError{"z_declare_subscriber for " + resource + " failed", resultValueToErrorCode(result.value)}
 	}
