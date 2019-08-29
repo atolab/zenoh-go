@@ -12,6 +12,7 @@ package zenoh
 
 // Forward declarations of callbacks (see callbacks.go)
 extern void subscriber_callback_cgo(const z_resource_id_t *rid, const unsigned char *data, size_t length, const z_data_info_t *info, void *arg);
+extern void reply_callback_cgo(const z_reply_value_t *reply, void *arg);
 
 */
 import "C"
@@ -215,9 +216,44 @@ func (z *Zenoh) WriteDataWO(resource string, payload []byte, encoding int, kind 
 	return nil
 }
 
-//
-// z_query
-//
+type replyCallbackRegistry struct {
+	mu    *sync.Mutex
+	index int
+	fns   map[int]ReplyCallback
+}
+
+var replyReg = replyCallbackRegistry{new(sync.Mutex), 0, make(map[int]ReplyCallback)}
+
+//export callReplyCallback
+func callReplyCallback(reply *C.z_reply_value_t, arg unsafe.Pointer) {
+	index := uintptr(arg)
+	goCallback := replyReg.fns[int(index)]
+	goCallback(reply)
+}
+
+// Query a resource with a predicate
+func (z *Zenoh) Query(resource string, predicate string, callback ReplyCallback) error {
+	r := C.CString(resource)
+	defer C.free(unsafe.Pointer(r))
+	p := C.CString(predicate)
+	defer C.free(unsafe.Pointer(p))
+
+	replyReg.mu.Lock()
+	defer replyReg.mu.Unlock()
+	replyReg.index++
+	for replyReg.fns[replyReg.index] != nil {
+		replyReg.index++
+	}
+	replyReg.fns[replyReg.index] = callback
+
+	result := C.z_query(z, r, p,
+		(C.z_reply_callback_t)(unsafe.Pointer(C.reply_callback_cgo)),
+		unsafe.Pointer(uintptr(replyReg.index)))
+	if result != 0 {
+		return &ZError{"z_query on " + resource + "failed", int(result)}
+	}
+	return nil
+}
 
 // UndeclareSubscriber a Subscriber
 func (z *Zenoh) UndeclareSubscriber(s *Subscriber) error {
@@ -259,6 +295,9 @@ type Publisher = C.z_pub_t
 
 // SubscriberCallback the callback to be implemented for the reception of subscribed resources
 type SubscriberCallback func(rid string, data []byte, info *DataInfo)
+
+// ReplyCallback the callback to be implemented for the reception of a query results
+type ReplyCallback func(reply *ReplyValue)
 
 // SubMode is a Subscriber mode
 type SubMode = C.z_sub_mode_t
@@ -321,6 +360,52 @@ func (ts *Timestamp) ClockID() [16]byte {
 // Time returns the time of a Timestamp
 func (ts *Timestamp) Time() uint64 {
 	return uint64(ts.time)
+}
+
+// ReplyKind is the kind of a ReplyValue
+type ReplyKind = C.char
+
+const (
+	// ZStorageData : a reply with data from a storage
+	ZStorageData ReplyKind = iota
+	// ZStorageFinal : a final reply from a storage (without data)
+	ZStorageFinal ReplyKind = iota
+	// ZReplyFinal : the final reply (without data)
+	ZReplyFinal ReplyKind = iota
+)
+
+// ReplyValue is a reply to a query
+type ReplyValue = C.z_reply_value_t
+
+// Kind returns the Reply message kind
+func (r *ReplyValue) Kind() ReplyKind {
+	return ReplyKind(r.kind)
+}
+
+// Stoid returns the StorageId of the storage that sent this reply
+func (r *ReplyValue) Stoid() []byte {
+	return C.GoBytes(unsafe.Pointer(r.stoid), C.int(r.stoid_length))
+}
+
+// RSN returns the request sequence number
+func (r *ReplyValue) RSN() uint64 {
+	return uint64(r.rsn)
+}
+
+// RName returns the resource name of this reply
+func (r *ReplyValue) RName() string {
+	return C.GoString(r.rname)
+}
+
+// Data returns the data of this reply, if the Reply message kind is Z_STORAGE_DATA.
+// Otherwise, it returns null
+func (r *ReplyValue) Data() []byte {
+	return C.GoBytes(unsafe.Pointer(r.data), C.int(r.data_length))
+}
+
+// Info returns the DataInfo associated to this reply
+func (r *ReplyValue) Info() DataInfo {
+	return r.info
 }
 
 func resultValueToErrorCode(cbytes [8]byte) int {
