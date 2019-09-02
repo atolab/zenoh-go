@@ -7,12 +7,20 @@ package zenoh
 #define ZENOH_MACOS 1
 
 #include <stdlib.h>
+#include <stdio.h>
 #include <zenoh.h>
 #include <zenoh/recv_loop.h>
 
 // Forward declarations of callbacks (see callbacks.go)
 extern void subscriber_callback_cgo(const z_resource_id_t *rid, const unsigned char *data, size_t length, const z_data_info_t *info, void *arg);
+extern void storage_subscriber_callback_cgo(const z_resource_id_t *rid, const unsigned char *data, size_t length, const z_data_info_t *info, void *arg);
+extern void storage_query_handler_cgo(const char *rname, const char *predicate, replies_sender_t send_replies, void *query_handle, void *arg);
 extern void reply_callback_cgo(const z_reply_value_t *reply, void *arg);
+
+// Indirection since Go cannot call a C function pointer (replies_sender_t)
+inline void call_replies_sender(replies_sender_t send_replies, void *query_handle, z_array_resource_t *replies) {
+	send_replies(query_handle, *replies);
+}
 
 */
 import "C"
@@ -161,9 +169,79 @@ func (z *Zenoh) DeclarePublisher(resource string) (*Publisher, error) {
 	return resultValueToPublisher(result.value), nil
 }
 
-//
-// z_declare_storage
-//
+type storageCallbacksRegistry struct {
+	mu       *sync.Mutex
+	index    int
+	subCb    map[int]SubscriberCallback
+	qHandler map[int]QueryHandler
+}
+
+var stoCbReg = storageCallbacksRegistry{new(sync.Mutex), 0, make(map[int]SubscriberCallback), make(map[int]QueryHandler)}
+
+//export callStorageSubscriberCallback
+func callStorageSubscriberCallback(rid *C.z_resource_id_t, data unsafe.Pointer, length C.size_t, info *C.z_data_info_t, arg unsafe.Pointer) {
+	var rname string
+	if rid.kind == C.Z_STR_RES_ID {
+		rname = resIDToRName(rid.id)
+	} else {
+		fmt.Printf("INTERNAL ERROR: StorageSubscriberCallback received a non-string z_resource_id_t with kind=%d\n", rid.kind)
+		return
+	}
+
+	dataSlice := C.GoBytes(data, C.int(length))
+
+	// Note: 'arg' parameter is used to store the index of callback in stoCbReg.subCb. Don't use it as a real C memory address !!
+	index := uintptr(arg)
+	goCallback := stoCbReg.subCb[int(index)]
+	goCallback(rname, dataSlice, info)
+}
+
+//export callStorageQueryHandler
+func callStorageQueryHandler(rname *C.char, predicate *C.char, sendReplies unsafe.Pointer, queryHandle unsafe.Pointer, arg unsafe.Pointer) {
+	goRname := C.GoString(rname)
+	goPredicate := C.GoString(predicate)
+	goRepliesSender := new(RepliesSender)
+	goRepliesSender.sendRepliesFunc = C.replies_sender_t(sendReplies)
+	goRepliesSender.queryHandle = queryHandle
+
+	// Note: 'arg' parameter is used to store the index of callback in stoCbReg.qHandler. Don't use it as a real C memory address !!
+	index := uintptr(arg)
+	goCallback := stoCbReg.qHandler[int(index)]
+	goCallback(goRname, goPredicate, goRepliesSender)
+}
+
+// DeclareStorage declares a Storage on a resource
+func (z *Zenoh) DeclareStorage(resource string, callback SubscriberCallback, handler QueryHandler) (*Storage, error) {
+	r := C.CString(resource)
+	defer C.free(unsafe.Pointer(r))
+
+	stoCbReg.mu.Lock()
+	defer stoCbReg.mu.Unlock()
+
+	stoCbReg.index++
+	for stoCbReg.subCb[stoCbReg.index] != nil {
+		stoCbReg.index++
+	}
+	stoCbReg.subCb[stoCbReg.index] = callback
+	stoCbReg.qHandler[stoCbReg.index] = handler
+
+	// Note: 'arg' parameter is used to store the index of callbacks in stoCbReg. Don't use it as a real C memory address !!
+	result := C.z_declare_storage(z, r,
+		(C.subscriber_callback_t)(unsafe.Pointer(C.storage_subscriber_callback_cgo)),
+		(C.query_handler_t)(unsafe.Pointer(C.storage_query_handler_cgo)),
+		unsafe.Pointer(uintptr(stoCbReg.index)))
+	if result.tag == C.Z_ERROR_TAG {
+		delete(stoCbReg.subCb, stoCbReg.index)
+		delete(stoCbReg.qHandler, stoCbReg.index)
+		return nil, &ZError{"z_declare_storage for " + resource + " failed", resultValueToErrorCode(result.value)}
+	}
+
+	storage := new(Storage)
+	storage.zsto = resultValueToStorage(result.value)
+	storage.regIndex = subReg.index
+
+	return storage, nil
+}
 
 // StreamCompactData writes a payload for the resource with which the Publisher is declared
 func (p *Publisher) StreamCompactData(payload []byte) error {
@@ -293,8 +371,70 @@ type Subscriber struct {
 // Publisher is a Zenoh publisher
 type Publisher = C.z_pub_t
 
-// SubscriberCallback the callback to be implemented for the reception of subscribed resources
+// Storage is a Zenoh storage
+type Storage struct {
+	regIndex int
+	zsto     *C.z_sto_t
+}
+
+// RepliesSender is used in a storage's QueryHandler() implementation when sending back replies to a query.
+type RepliesSender struct {
+	sendRepliesFunc C.replies_sender_t
+	queryHandle     unsafe.Pointer
+}
+
+var sizeofUintptr = int(unsafe.Sizeof(uintptr(0)))
+
+// SendReplies sends the replies to a query on a storage.
+// This operation should be called in the implementation of a QueryHandler
+func (rs *RepliesSender) SendReplies(replies []Resource) {
+	// Convert []Resource into z_array_resource_t
+	array := new(C.z_array_resource_t)
+	if replies == nil {
+		array.length = 0
+		array.elem = nil
+	} else {
+		nbRes := len(replies)
+
+		var (
+			cResources     = (*C.z_resource_t)(C.malloc(C.size_t(C.sizeof_z_resource_t * nbRes)))
+			goResources    = (*[1 << 30]C.z_resource_t)(unsafe.Pointer(cResources))[:nbRes:nbRes]
+			cResourcesPtr  = (*uintptr)(C.malloc(C.size_t(sizeofUintptr * nbRes)))
+			goResourcesPtr = (*[1 << 30]uintptr)(unsafe.Pointer(cResourcesPtr))[:nbRes:nbRes]
+		)
+		defer C.free(unsafe.Pointer(cResources))
+		defer C.free(unsafe.Pointer(cResourcesPtr))
+		for i, r := range replies {
+			goResources[i].rname = C.CString(r.RName)
+			defer C.free(unsafe.Pointer(goResources[i].rname))
+			goResources[i].data = (*C.uchar)(C.CBytes(r.Data))
+			defer C.free(unsafe.Pointer(goResources[i].data))
+			goResources[i].length = C.ulong(len(r.Data))
+			goResources[i].encoding = C.ushort(r.Encoding)
+			goResources[i].kind = C.ushort(r.Kind)
+
+			goResourcesPtr[i] = (uintptr)(unsafe.Pointer(&goResources[i]))
+		}
+		array.length = C.uint(nbRes)
+		array.elem = (**C.z_resource_t)(unsafe.Pointer(cResourcesPtr))
+
+	}
+	C.call_replies_sender(rs.sendRepliesFunc, rs.queryHandle, array)
+}
+
+// Resource is a Zenoh resource with a name and a value (data).
+type Resource struct {
+	RName    string
+	Data     []byte
+	Encoding uint16
+	Kind     uint16
+}
+
+// SubscriberCallback the callback to be implemented for the reception of subscribed resources (subscriber or storage)
 type SubscriberCallback func(rid string, data []byte, info *DataInfo)
+
+// QueryHandler the callback to be implemented for the reception of a query by a storage
+type QueryHandler func(rname string, predicate string, sendReplies *RepliesSender)
 
 // ReplyCallback the callback to be implemented for the reception of a query results
 type ReplyCallback func(reply *ReplyValue)
@@ -445,6 +585,17 @@ func resultValueToSubscriber(cbytes [8]byte) *C.z_sub_t {
 	if err := binary.Read(buf, binary.LittleEndian, &ptr); err == nil {
 		uptr := uintptr(ptr)
 		return (*C.z_sub_t)(unsafe.Pointer(uptr))
+	}
+	return nil
+}
+
+// resultValueToStorage gets the Storage (z_sto_t) from a z_sto_p_result_t.value (union type)
+func resultValueToStorage(cbytes [8]byte) *C.z_sto_t {
+	buf := bytes.NewBuffer(cbytes[:])
+	var ptr uint64
+	if err := binary.Read(buf, binary.LittleEndian, &ptr); err == nil {
+		uptr := uintptr(ptr)
+		return (*C.z_sto_t)(unsafe.Pointer(uptr))
 	}
 	return nil
 }
