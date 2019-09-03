@@ -1,3 +1,4 @@
+// Package zenoh provides the Zenoh client API in Go.
 package zenoh
 
 /*
@@ -45,7 +46,8 @@ func (e *ZError) Error() string {
 	return e.msg + " (error code:" + strconv.Itoa(e.code) + ")"
 }
 
-// ZOpen opens a connection to a Zenoh broker or peer.
+// ZOpen opens a connection to a Zenoh broker specified by its locator.
+// The returned Zenoh can be used for requests on the Zenoh broker.
 func ZOpen(locator string) (*Zenoh, error) {
 	l := C.CString(locator)
 	defer C.free(unsafe.Pointer(l))
@@ -65,7 +67,8 @@ func ZOpen(locator string) (*Zenoh, error) {
 	return z, nil
 }
 
-// ZOpenWUP opens a connection to a Zenoh broker or peer, using a username and a password.
+// ZOpenWUP opens a connection to a Zenoh broker specified by its locator, using a username and a password.
+// The returned Zenoh can be used for requests on the Zenoh broker.
 func ZOpenWUP(locator string, uname string, passwd string) (*Zenoh, error) {
 	l := C.CString(locator)
 	defer C.free(unsafe.Pointer(l))
@@ -82,6 +85,19 @@ func ZOpenWUP(locator string, uname string, passwd string) (*Zenoh, error) {
 	}
 
 	return resultValueToZenoh(result.value), nil
+}
+
+// Close closes the connection to the Zenoh broker.
+func (z *Zenoh) Close() error {
+	errcode := C.z_stop_recv_loop(z)
+	if errcode != 0 {
+		return &ZError{"z_stop_recv_loop failed", int(errcode)}
+	}
+	errcode = C.z_close(z)
+	if errcode != 0 {
+		return &ZError{"z_close failed", int(errcode)}
+	}
+	return nil
 }
 
 // Info returns information about the Zenoh configuration and status.
@@ -440,13 +456,13 @@ type Resource struct {
 	Kind     uint16
 }
 
-// SubscriberCallback the callback to be implemented for the reception of subscribed resources (subscriber or storage)
+// SubscriberCallback is the callback to be implemented for the reception of subscribed resources (subscriber or storage)
 type SubscriberCallback func(rid string, data []byte, info *DataInfo)
 
-// QueryHandler the callback to be implemented for the reception of a query by a storage
+// QueryHandler is the callback to be implemented for the reception of a query by a storage
 type QueryHandler func(rname string, predicate string, sendReplies *RepliesSender)
 
-// ReplyCallback the callback to be implemented for the reception of a query results
+// ReplyCallback is the callback to be implemented for the reception of a query results
 type ReplyCallback func(reply *ReplyValue)
 
 // SubMode is a Subscriber mode
