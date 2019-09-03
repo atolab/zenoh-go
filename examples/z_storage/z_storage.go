@@ -11,7 +11,7 @@ import (
 var stored map[string][]byte
 
 func listener(rname string, data []byte, info *zenoh.DataInfo) {
-	fmt.Printf("Received data: %s : [% x]\n", rname, data)
+	fmt.Printf("Received data: %s\n", rname)
 	stored[rname] = data
 }
 
@@ -19,12 +19,14 @@ func queryHandler(rname string, predicate string, repliesSender *zenoh.RepliesSe
 	fmt.Println("Handling Query: " + rname)
 	replies := make([]zenoh.Resource, 0, len(stored))
 	for k, v := range stored {
-		var res zenoh.Resource
-		res.RName = k
-		res.Data = v
-		res.Encoding = 0
-		res.Kind = 0
-		replies = append(replies, res)
+		if zenoh.RNameIntersect(rname, k) {
+			var res zenoh.Resource
+			res.RName = k
+			res.Data = v
+			res.Encoding = 0
+			res.Kind = 0
+			replies = append(replies, res)
+		}
 	}
 
 	repliesSender.SendReplies(replies)

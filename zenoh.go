@@ -10,6 +10,7 @@ package zenoh
 #include <stdio.h>
 #include <zenoh.h>
 #include <zenoh/recv_loop.h>
+#include <zenoh/rname.h>
 
 // Forward declarations of callbacks (see callbacks.go)
 extern void subscriber_callback_cgo(const z_resource_id_t *rid, const unsigned char *data, size_t length, const z_data_info_t *info, void *arg);
@@ -49,7 +50,6 @@ func ZOpen(locator string) (*Zenoh, error) {
 	l := C.CString(locator)
 	defer C.free(unsafe.Pointer(l))
 
-	fmt.Println("Call z_open on" + locator)
 	result := C.z_open(l, nil, nil)
 
 	if result.tag == C.Z_ERROR_TAG {
@@ -292,6 +292,16 @@ func (z *Zenoh) WriteDataWO(resource string, payload []byte, encoding int, kind 
 		return &ZError{"z_write_data_wo of " + strconv.Itoa(len(payload)) + " bytes buffer on " + resource + "failed", int(result)}
 	}
 	return nil
+}
+
+// RNameIntersect returns true if the resource name 'rname1' intersect with the resrouce name 'rname2'.
+func RNameIntersect(rname1 string, rname2 string) bool {
+	r1 := C.CString(rname1)
+	defer C.free(unsafe.Pointer(r1))
+	r2 := C.CString(rname2)
+	defer C.free(unsafe.Pointer(r2))
+
+	return C.intersect(r1, r2) != 0
 }
 
 type replyCallbackRegistry struct {
