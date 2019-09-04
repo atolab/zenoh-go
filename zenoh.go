@@ -261,7 +261,8 @@ func (z *Zenoh) DeclareStorage(resource string, callback SubscriberCallback, han
 
 // StreamCompactData writes a payload for the resource with which the Publisher is declared
 func (p *Publisher) StreamCompactData(payload []byte) error {
-	result := C.z_stream_compact_data(p, (*C.uchar)(unsafe.Pointer(&payload[0])), C.ulong(len(payload)))
+	b, l := bufferToC(payload)
+	result := C.z_stream_compact_data(p, b, l)
 	if result != 0 {
 		return &ZError{"z_stream_compact_data of " + strconv.Itoa(len(payload)) + " bytes buffer failed", int(result)}
 	}
@@ -270,7 +271,8 @@ func (p *Publisher) StreamCompactData(payload []byte) error {
 
 // StreamData writes a payload for the resource with which the Publisher is declared
 func (p *Publisher) StreamData(payload []byte) error {
-	result := C.z_stream_data(p, (*C.uchar)(unsafe.Pointer(&payload[0])), C.ulong(len(payload)))
+	b, l := bufferToC(payload)
+	result := C.z_stream_data(p, b, l)
 	if result != 0 {
 		return &ZError{"z_stream_data of " + strconv.Itoa(len(payload)) + " bytes buffer failed", int(result)}
 	}
@@ -282,7 +284,8 @@ func (z *Zenoh) WriteData(resource string, payload []byte) error {
 	r := C.CString(resource)
 	defer C.free(unsafe.Pointer(r))
 
-	result := C.z_write_data(z, r, (*C.uchar)(unsafe.Pointer(&payload[0])), C.ulong(len(payload)))
+	b, l := bufferToC(payload)
+	result := C.z_write_data(z, r, b, l)
 	if result != 0 {
 		return &ZError{"z_write_data of " + strconv.Itoa(len(payload)) + " bytes buffer on " + resource + "failed", int(result)}
 	}
@@ -291,7 +294,8 @@ func (z *Zenoh) WriteData(resource string, payload []byte) error {
 
 // StreamDataWO writes a payload for the resource with which the Publisher is declared
 func (p *Publisher) StreamDataWO(payload []byte, encoding int, kind int) error {
-	result := C.z_stream_data_wo(p, (*C.uchar)(unsafe.Pointer(&payload[0])), C.ulong(len(payload)), C.uchar(encoding), C.uchar(kind))
+	b, l := bufferToC(payload)
+	result := C.z_stream_data_wo(p, b, l, C.uchar(encoding), C.uchar(kind))
 	if result != 0 {
 		return &ZError{"z_stream_data_wo of " + strconv.Itoa(len(payload)) + " bytes buffer failed", int(result)}
 	}
@@ -303,11 +307,21 @@ func (z *Zenoh) WriteDataWO(resource string, payload []byte, encoding int, kind 
 	r := C.CString(resource)
 	defer C.free(unsafe.Pointer(r))
 
-	result := C.z_write_data_wo(z, r, (*C.uchar)(unsafe.Pointer(&payload[0])), C.ulong(len(payload)), C.uchar(encoding), C.uchar(kind))
+	b, l := bufferToC(payload)
+	result := C.z_write_data_wo(z, r, b, l, C.uchar(encoding), C.uchar(kind))
 	if result != 0 {
 		return &ZError{"z_write_data_wo of " + strconv.Itoa(len(payload)) + " bytes buffer on " + resource + "failed", int(result)}
 	}
 	return nil
+}
+
+var nullCPtr = (*C.uchar)(unsafe.Pointer(nil))
+
+func bufferToC(buf []byte) (*C.uchar, C.ulong) {
+	if buf == nil {
+		return nullCPtr, C.ulong(0)
+	}
+	return (*C.uchar)(unsafe.Pointer(&buf[0])), C.ulong(len(buf))
 }
 
 // RNameIntersect returns true if the resource name 'rname1' intersect with the resrouce name 'rname2'.
