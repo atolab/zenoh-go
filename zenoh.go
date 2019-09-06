@@ -34,6 +34,8 @@ import (
 	"strings"
 	"sync"
 	"unsafe"
+
+	log "github.com/sirupsen/logrus"
 )
 
 // ZError reports an error that occured in the zenoh-c library
@@ -46,9 +48,13 @@ func (e *ZError) Error() string {
 	return e.msg + " (error code:" + strconv.Itoa(e.code) + ")"
 }
 
+var logger = log.WithFields(log.Fields{" pkg": "zenoh"})
+
 // ZOpen opens a connection to a Zenoh broker specified by its locator.
 // The returned Zenoh can be used for requests on the Zenoh broker.
 func ZOpen(locator string) (*Zenoh, error) {
+	logger.WithField("locator", locator).Debug("ZOpen")
+
 	l := C.CString(locator)
 	defer C.free(unsafe.Pointer(l))
 
@@ -57,6 +63,8 @@ func ZOpen(locator string) (*Zenoh, error) {
 		return nil, &ZError{"z_open on " + locator + " failed", resultValueToErrorCode(result.value)}
 	}
 	z := resultValueToZenoh(result.value)
+
+	logger.WithField("locator", locator).Debug("Call z_start_recv_loop")
 	errcode := C.z_start_recv_loop(z)
 	if errcode != 0 {
 		return nil, &ZError{"z_start_recv_loop failed", int(errcode)}
@@ -68,6 +76,11 @@ func ZOpen(locator string) (*Zenoh, error) {
 // ZOpenWUP opens a connection to a Zenoh broker specified by its locator, using a username and a password.
 // The returned Zenoh can be used for requests on the Zenoh broker.
 func ZOpenWUP(locator string, uname string, passwd string) (*Zenoh, error) {
+	logger.WithFields(log.Fields{
+		"locator": locator,
+		"uname":   uname,
+	}).Debug("ZOpenWUP")
+
 	l := C.CString(locator)
 	defer C.free(unsafe.Pointer(l))
 	u := C.CString(uname)
@@ -81,6 +94,7 @@ func ZOpenWUP(locator string, uname string, passwd string) (*Zenoh, error) {
 	}
 	z := resultValueToZenoh(result.value)
 
+	logger.WithField("locator", locator).Debug("Call z_start_recv_loop")
 	errcode := C.z_start_recv_loop(z)
 	if errcode != 0 {
 		return nil, &ZError{"z_start_recv_loop failed", int(errcode)}
@@ -91,6 +105,7 @@ func ZOpenWUP(locator string, uname string, passwd string) (*Zenoh, error) {
 
 // Close closes the connection to the Zenoh broker.
 func (z *Zenoh) Close() error {
+	logger.Debug("Close")
 	errcode := C.z_stop_recv_loop(z)
 	if errcode != 0 {
 		return &ZError{"z_stop_recv_loop failed", int(errcode)}
@@ -147,6 +162,8 @@ func callSubscriberCallback(rid *C.z_resource_id_t, data unsafe.Pointer, length 
 
 // DeclareSubscriber declares a Subscriber on a resource
 func (z *Zenoh) DeclareSubscriber(resource string, mode SubMode, callback SubscriberCallback) (*Subscriber, error) {
+	logger.WithField("resource", resource).Debug("DeclareSubscriber")
+
 	r := C.CString(resource)
 	defer C.free(unsafe.Pointer(r))
 
@@ -176,6 +193,8 @@ func (z *Zenoh) DeclareSubscriber(resource string, mode SubMode, callback Subscr
 
 // DeclarePublisher declares a Publisher on a resource
 func (z *Zenoh) DeclarePublisher(resource string) (*Publisher, error) {
+	logger.WithField("resource", resource).Debug("DeclarePublisher")
+
 	r := C.CString(resource)
 	defer C.free(unsafe.Pointer(r))
 
@@ -230,6 +249,8 @@ func callStorageQueryHandler(rname *C.char, predicate *C.char, sendReplies unsaf
 
 // DeclareStorage declares a Storage on a resource
 func (z *Zenoh) DeclareStorage(resource string, callback SubscriberCallback, handler QueryHandler) (*Storage, error) {
+	logger.WithField("resource", resource).Debug("DeclareStorage")
+
 	r := C.CString(resource)
 	defer C.free(unsafe.Pointer(r))
 
