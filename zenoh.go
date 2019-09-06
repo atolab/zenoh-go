@@ -295,7 +295,7 @@ func (z *Zenoh) WriteData(resource string, payload []byte) error {
 }
 
 // StreamDataWO writes a payload for the resource with which the Publisher is declared
-func (p *Publisher) StreamDataWO(payload []byte, encoding int, kind int) error {
+func (p *Publisher) StreamDataWO(payload []byte, encoding uint8, kind uint8) error {
 	b, l := bufferToC(payload)
 	result := C.z_stream_data_wo(p, b, l, C.uchar(encoding), C.uchar(kind))
 	if result != 0 {
@@ -305,7 +305,7 @@ func (p *Publisher) StreamDataWO(payload []byte, encoding int, kind int) error {
 }
 
 // WriteDataWO writes a payload for a resource in Zenoh
-func (z *Zenoh) WriteDataWO(resource string, payload []byte, encoding int, kind int) error {
+func (z *Zenoh) WriteDataWO(resource string, payload []byte, encoding uint8, kind uint8) error {
 	r := C.CString(resource)
 	defer C.free(unsafe.Pointer(r))
 
@@ -482,8 +482,8 @@ func (rs *RepliesSender) SendReplies(replies []Resource) {
 type Resource struct {
 	RName    string
 	Data     []byte
-	Encoding uint16
-	Kind     uint16
+	Encoding uint8
+	Kind     uint8
 }
 
 // SubscriberCallback is the callback to be implemented for the reception of subscribed resources (subscriber or storage)
