@@ -53,11 +53,9 @@ func ZOpen(locator string) (*Zenoh, error) {
 	defer C.free(unsafe.Pointer(l))
 
 	result := C.z_open(l, nil, nil)
-
 	if result.tag == C.Z_ERROR_TAG {
 		return nil, &ZError{"z_open on " + locator + " failed", resultValueToErrorCode(result.value)}
 	}
-
 	z := resultValueToZenoh(result.value)
 	errcode := C.z_start_recv_loop(z)
 	if errcode != 0 {
@@ -77,14 +75,18 @@ func ZOpenWUP(locator string, uname string, passwd string) (*Zenoh, error) {
 	p := C.CString(passwd)
 	defer C.free(unsafe.Pointer(p))
 
-	fmt.Println("Call z_open_wup on" + locator)
 	result := C.z_open_wup(l, u, p)
-
 	if result.tag == C.Z_ERROR_TAG {
 		return nil, &ZError{"z_open on " + locator + " failed", resultValueToErrorCode(result.value)}
 	}
+	z := resultValueToZenoh(result.value)
 
-	return resultValueToZenoh(result.value), nil
+	errcode := C.z_start_recv_loop(z)
+	if errcode != 0 {
+		return nil, &ZError{"z_start_recv_loop failed", int(errcode)}
+	}
+
+	return z, nil
 }
 
 // Close closes the connection to the Zenoh broker.
@@ -373,7 +375,7 @@ func (z *Zenoh) Query(resource string, predicate string, callback ReplyCallback)
 	return nil
 }
 
-// UndeclareSubscriber a Subscriber
+// UndeclareSubscriber undeclares a Subscriber
 func (z *Zenoh) UndeclareSubscriber(s *Subscriber) error {
 	result := C.z_undeclare_subscriber(s.zsub)
 	if result != 0 {
@@ -386,12 +388,26 @@ func (z *Zenoh) UndeclareSubscriber(s *Subscriber) error {
 	return nil
 }
 
-// UndeclarePublisher a Publisher
+// UndeclarePublisher undeclares a Publisher
 func (z *Zenoh) UndeclarePublisher(p *Publisher) error {
 	result := C.z_undeclare_publisher(p)
 	if result != 0 {
 		return &ZError{"z_undeclare_publisher failed", int(result)}
 	}
+	return nil
+}
+
+// UndeclareStorage undeclares a Storage
+func (z *Zenoh) UndeclareStorage(s *Storage) error {
+	result := C.z_undeclare_storage(s.zsto)
+	if result != 0 {
+		return &ZError{"z_undeclare_storage failed", int(result)}
+	}
+	subReg.mu.Lock()
+	delete(stoCbReg.subCb, s.regIndex)
+	delete(stoCbReg.qHandler, s.regIndex)
+	subReg.mu.Unlock()
+
 	return nil
 }
 
