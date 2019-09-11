@@ -20,6 +20,11 @@ void storage_query_handler_cgo(const char *rname, const char *predicate, replies
 	callStorageQueryHandler(rname, predicate, send_replies, query_handle, arg);
 }
 
+void eval_query_handler_cgo(const char *rname, const char *predicate, replies_sender_t send_replies, void *query_handle, void *arg) {
+	void callEvalQueryHandler(const char*, const char*, replies_sender_t, void*, void*);
+	callEvalQueryHandler(rname, predicate, send_replies, query_handle, arg);
+}
+
 void reply_callback_cgo(const z_reply_value_t *reply, void *arg) {
 	void callReplyCallback(const z_reply_value_t*, void*);
 	callReplyCallback(reply, arg);

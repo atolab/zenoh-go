@@ -11,12 +11,21 @@ import (
 func replyHandler(reply *zenoh.ReplyValue) {
 	switch reply.Kind() {
 	case zenoh.ZStorageData:
+	case zenoh.ZEvalData:
 		data := reply.Data()
 		_, data = zenoh.VleDecode(data)
-		fmt.Printf("Received Storage Data. (%s, %s)\n", reply.RName(), string(data))
+		switch reply.Kind() {
+		case zenoh.ZStorageData:
+			fmt.Printf("Received Storage Data. (%s, %s)\n", reply.RName(), string(data))
+		case zenoh.ZEvalData:
+			fmt.Printf("Received Eval   Data. (%s, %s)\n", reply.RName(), string(data))
+		}
 
 	case zenoh.ZStorageFinal:
 		fmt.Println("Received Storage Final.")
+
+	case zenoh.ZEvalFinal:
+		fmt.Println("Received Eval Final.")
 
 	case zenoh.ZReplyFinal:
 		fmt.Println("Received Reply Final.")

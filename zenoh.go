@@ -17,6 +17,7 @@ package zenoh
 extern void subscriber_callback_cgo(const z_resource_id_t *rid, const unsigned char *data, size_t length, const z_data_info_t *info, void *arg);
 extern void storage_subscriber_callback_cgo(const z_resource_id_t *rid, const unsigned char *data, size_t length, const z_data_info_t *info, void *arg);
 extern void storage_query_handler_cgo(const char *rname, const char *predicate, replies_sender_t send_replies, void *query_handle, void *arg);
+extern void eval_query_handler_cgo(const char *rname, const char *predicate, replies_sender_t send_replies, void *query_handle, void *arg);
 extern void reply_callback_cgo(const z_reply_value_t *reply, void *arg);
 
 // Indirection since Go cannot call a C function pointer (replies_sender_t)
@@ -282,6 +283,60 @@ func (z *Zenoh) DeclareStorage(resource string, callback SubscriberCallback, han
 	return storage, nil
 }
 
+type evalCallbacksRegistry struct {
+	mu       *sync.Mutex
+	index    int
+	qHandler map[int]QueryHandler
+}
+
+var evalCbReg = evalCallbacksRegistry{new(sync.Mutex), 0, make(map[int]QueryHandler)}
+
+//export callEvalQueryHandler
+func callEvalQueryHandler(rname *C.char, predicate *C.char, sendReplies unsafe.Pointer, queryHandle unsafe.Pointer, arg unsafe.Pointer) {
+	goRname := C.GoString(rname)
+	goPredicate := C.GoString(predicate)
+	goRepliesSender := new(RepliesSender)
+	goRepliesSender.sendRepliesFunc = C.replies_sender_t(sendReplies)
+	goRepliesSender.queryHandle = queryHandle
+
+	// Note: 'arg' parameter is used to store the index of callback in evalCbReg.qHandler. Don't use it as a real C memory address !!
+	index := uintptr(arg)
+	goCallback := evalCbReg.qHandler[int(index)]
+	goCallback(goRname, goPredicate, goRepliesSender)
+}
+
+// DeclareEval declares a Eval on a resource
+func (z *Zenoh) DeclareEval(resource string, handler QueryHandler) (*Eval, error) {
+	logger.WithField("resource", resource).Debug("DeclareEval")
+
+	r := C.CString(resource)
+	defer C.free(unsafe.Pointer(r))
+
+	evalCbReg.mu.Lock()
+	defer evalCbReg.mu.Unlock()
+
+	evalCbReg.index++
+	for evalCbReg.qHandler[evalCbReg.index] != nil {
+		evalCbReg.index++
+	}
+	evalCbReg.qHandler[evalCbReg.index] = handler
+
+	// Note: 'arg' parameter is used to store the index of callbacks in evalCbReg. Don't use it as a real C memory address !!
+	result := C.z_declare_eval(z, r,
+		(C.query_handler_t)(unsafe.Pointer(C.eval_query_handler_cgo)),
+		unsafe.Pointer(uintptr(evalCbReg.index)))
+	if result.tag == C.Z_ERROR_TAG {
+		delete(evalCbReg.qHandler, evalCbReg.index)
+		return nil, &ZError{"z_declare_eval for " + resource + " failed", resultValueToErrorCode(result.value)}
+	}
+
+	eval := new(Eval)
+	eval.zeval = resultValueToEval(result.value)
+	eval.regIndex = evalCbReg.index
+
+	return eval, nil
+}
+
 // StreamCompactData writes a payload for the resource with which the Publisher is declared
 func (p *Publisher) StreamCompactData(payload []byte) error {
 	b, l := bufferToC(payload)
@@ -424,10 +479,23 @@ func (z *Zenoh) UndeclareStorage(s *Storage) error {
 	if result != 0 {
 		return &ZError{"z_undeclare_storage failed", int(result)}
 	}
-	subReg.mu.Lock()
+	stoCbReg.mu.Lock()
 	delete(stoCbReg.subCb, s.regIndex)
 	delete(stoCbReg.qHandler, s.regIndex)
-	subReg.mu.Unlock()
+	stoCbReg.mu.Unlock()
+
+	return nil
+}
+
+// UndeclareEval undeclares an Eval
+func (z *Zenoh) UndeclareEval(e *Eval) error {
+	result := C.z_undeclare_eval(e.zeval)
+	if result != 0 {
+		return &ZError{"z_undeclare_eval failed", int(result)}
+	}
+	evalCbReg.mu.Lock()
+	delete(evalCbReg.qHandler, e.regIndex)
+	evalCbReg.mu.Unlock()
 
 	return nil
 }
@@ -454,7 +522,13 @@ type Storage struct {
 	zsto     *C.z_sto_t
 }
 
-// RepliesSender is used in a storage's QueryHandler() implementation when sending back replies to a query.
+// Eval is a Zenoh eval
+type Eval struct {
+	regIndex int
+	zeval    *C.z_eva_t
+}
+
+// RepliesSender is used in a storage's and eval's QueryHandler() implementation when sending back replies to a query.
 type RepliesSender struct {
 	sendRepliesFunc C.replies_sender_t
 	queryHandle     unsafe.Pointer
@@ -587,6 +661,10 @@ const (
 	ZStorageData ReplyKind = iota
 	// ZStorageFinal : a final reply from a storage (without data)
 	ZStorageFinal ReplyKind = iota
+	// ZEvalData : a reply with data from an eval
+	ZEvalData ReplyKind = iota
+	// ZEvalFinal : a final reply from an eval (without data)
+	ZEvalFinal ReplyKind = iota
 	// ZReplyFinal : the final reply (without data)
 	ZReplyFinal ReplyKind = iota
 )
@@ -673,6 +751,17 @@ func resultValueToStorage(cbytes [8]byte) *C.z_sto_t {
 	if err := binary.Read(buf, binary.LittleEndian, &ptr); err == nil {
 		uptr := uintptr(ptr)
 		return (*C.z_sto_t)(unsafe.Pointer(uptr))
+	}
+	return nil
+}
+
+// resultValueToEval gets the Eval (z_eva_t) from a z_eval_p_result_t.value (union type)
+func resultValueToEval(cbytes [8]byte) *C.z_eva_t {
+	buf := bytes.NewBuffer(cbytes[:])
+	var ptr uint64
+	if err := binary.Read(buf, binary.LittleEndian, &ptr); err == nil {
+		uptr := uintptr(ptr)
+		return (*C.z_eva_t)(unsafe.Pointer(uptr))
 	}
 	return nil
 }
