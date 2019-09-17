@@ -1,9 +1,9 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"os"
-	"time"
 
 	"github.com/atolab/zenoh-go"
 )
@@ -11,11 +11,11 @@ import (
 var uri string
 
 func queryHandler(rname string, predicate string, repliesSender *zenoh.RepliesSender) {
-	fmt.Println("Handling Query: " + rname)
+	fmt.Printf(">> [Query handler] Handling '%s?%s'\n", rname, predicate)
 
 	replies := make([]zenoh.Resource, 1, 1)
 	replies[0].RName = uri
-	replies[0].Data = []byte("\x0bEVAL_RES_GO")
+	replies[0].Data = []byte("Eval from Go!")
 	replies[0].Encoding = 0
 	replies[0].Kind = 0
 
@@ -29,7 +29,7 @@ func main() {
 		locator = os.Args[1]
 	}
 
-	uri = "/demo/eval"
+	uri = "/demo/example/zenoh-go-eval"
 	if len(os.Args) > 2 {
 		uri = os.Args[2]
 	}
@@ -40,14 +40,18 @@ func main() {
 		panic(err.Error())
 	}
 
-	fmt.Println("Declaring Eval: " + uri)
-	_, err = z.DeclareEval(uri, queryHandler)
+	fmt.Println("Declaring Eval on '" + uri + "'...")
+	e, err := z.DeclareEval(uri, queryHandler)
 	if err != nil {
 		panic(err.Error())
 	}
 
-	for {
-		time.Sleep(1 * time.Second)
+	reader := bufio.NewReader(os.Stdin)
+	var c rune
+	for c != 'q' {
+		c, _, _ = reader.ReadRune()
 	}
 
+	z.UndeclareEval(e)
+	z.Close()
 }

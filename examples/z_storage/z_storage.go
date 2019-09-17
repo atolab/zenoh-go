@@ -1,9 +1,9 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"os"
-	"time"
 
 	"github.com/atolab/zenoh-go"
 )
@@ -11,12 +11,13 @@ import (
 var stored map[string][]byte
 
 func listener(rname string, data []byte, info *zenoh.DataInfo) {
-	fmt.Printf("Received data: %s\n", rname)
+	str := string(data)
+	fmt.Printf(">> [Storage listener] Received ('%20s' : '%s')\n", rname, str)
 	stored[rname] = data
 }
 
 func queryHandler(rname string, predicate string, repliesSender *zenoh.RepliesSender) {
-	fmt.Println("Handling Query: " + rname)
+	fmt.Printf(">> [Query handler   ] Handling '%s?%s'\n", rname, predicate)
 	replies := make([]zenoh.Resource, 0, len(stored))
 	for k, v := range stored {
 		if zenoh.RNameIntersect(rname, k) {
@@ -40,25 +41,29 @@ func main() {
 		locator = os.Args[1]
 	}
 
-	uri := "/demo/**"
+	uri := "/demo/example/**"
 	if len(os.Args) > 2 {
 		uri = os.Args[2]
 	}
 
 	fmt.Println("Connecting to " + locator + "...")
-	z, err := zenoh.ZOpen("tcp/127.0.0.1:7447")
+	z, err := zenoh.ZOpen(locator)
 	if err != nil {
 		panic(err.Error())
 	}
 
-	fmt.Println("Declaring Storage: " + uri)
-	_, err = z.DeclareStorage(uri, listener, queryHandler)
+	fmt.Println("Declaring Storage on '" + uri + "'...")
+	s, err := z.DeclareStorage(uri, listener, queryHandler)
 	if err != nil {
 		panic(err.Error())
 	}
 
-	for {
-		time.Sleep(1 * time.Second)
+	reader := bufio.NewReader(os.Stdin)
+	var c rune
+	for c != 'q' {
+		c, _, _ = reader.ReadRune()
 	}
 
+	z.UndeclareStorage(s)
+	z.Close()
 }

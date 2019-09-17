@@ -14,39 +14,35 @@ func main() {
 		locator = os.Args[1]
 	}
 
-	uri := "/demo/hello/alpha"
+	uri := "/demo/example/zenoh-go-stream"
 	if len(os.Args) > 2 {
 		uri = os.Args[2]
 	}
 
-	value := "Hello World!"
+	value := "Stream from Go!"
 	if len(os.Args) > 3 {
 		value = os.Args[3]
 	}
 
 	fmt.Println("Connecting to " + locator + "...")
-	z, err := zenoh.ZOpen("tcp/127.0.0.1:7447")
+	z, err := zenoh.ZOpenWUP(locator, "user", "password")
 	if err != nil {
 		panic(err.Error())
 	}
 
-	fmt.Println("Declaring Publisher...")
+	fmt.Println("Declaring Publisher on '" + uri + "'...")
 	pub, err := z.DeclarePublisher(uri)
 	if err != nil {
 		panic(err.Error())
 	}
 
-	data := []byte(value)
-	vle := zenoh.VleEncode(len(data))
-	payload := append(vle, data...)
-
-	fmt.Println("Streaming Data...")
-	for true {
-		pub.StreamData(payload)
-		z.WriteData("/demo/hello/beta", payload)
-		z.WriteData("/demo/hello/gamma", payload)
-		z.WriteData("/demo/hello/eta", payload)
+	for idx := 0; idx < 100; idx++ {
 		time.Sleep(1 * time.Second)
+		s := fmt.Sprintf("[%4d] %s", idx, value)
+		fmt.Printf("Streaming Data ('%s': '%s')...\n", uri, s)
+		pub.StreamData([]byte(s))
 	}
 
+	z.UndeclarePublisher(pub)
+	z.Close()
 }

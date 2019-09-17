@@ -10,27 +10,24 @@ import (
 
 func replyHandler(reply *zenoh.ReplyValue) {
 	switch reply.Kind() {
-	case zenoh.ZStorageData:
-	case zenoh.ZEvalData:
-		data := reply.Data()
-		_, data = zenoh.VleDecode(data)
+	case zenoh.ZStorageData, zenoh.ZEvalData:
+		str := string(reply.Data())
 		switch reply.Kind() {
 		case zenoh.ZStorageData:
-			fmt.Printf("Received Storage Data. (%s, %s)\n", reply.RName(), string(data))
+			fmt.Printf(">> [Reply handler] received -Storage Data- ('%s': '%s')\n", reply.RName(), str)
 		case zenoh.ZEvalData:
-			fmt.Printf("Received Eval   Data. (%s, %s)\n", reply.RName(), string(data))
+			fmt.Printf(">> [Reply handler] received -Eval Data-    ('%s': '%s')\n", reply.RName(), str)
 		}
 
 	case zenoh.ZStorageFinal:
-		fmt.Println("Received Storage Final.")
+		fmt.Println(">> [Reply handler] received -Storage Final-")
 
 	case zenoh.ZEvalFinal:
-		fmt.Println("Received Eval Final.")
+		fmt.Println(">> [Reply handler] received -Eval Final-")
 
 	case zenoh.ZReplyFinal:
-		fmt.Println("Received Reply Final.")
+		fmt.Println(">> [Reply handler] received -Reply Final-")
 	}
-
 }
 
 func main() {
@@ -39,23 +36,24 @@ func main() {
 		locator = os.Args[1]
 	}
 
-	uri := "/demo/**"
+	uri := "/demo/example/**"
 	if len(os.Args) > 2 {
 		uri = os.Args[2]
 	}
 
 	fmt.Println("Connecting to " + locator + "...")
-	z, err := zenoh.ZOpen("tcp/127.0.0.1:7447")
+	z, err := zenoh.ZOpen(locator)
 	if err != nil {
 		panic(err.Error())
 	}
 
-	fmt.Println("Send Query...")
+	fmt.Println("Sending Query '" + uri + "'...")
 	err = z.Query(uri, "", replyHandler)
 	if err != nil {
 		panic(err.Error())
 	}
 
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(1 * time.Second)
 
+	z.Close()
 }
