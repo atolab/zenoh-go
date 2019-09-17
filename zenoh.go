@@ -65,11 +65,8 @@ func ZOpen(locator string) (*Zenoh, error) {
 	}
 	z := resultValueToZenoh(result.value)
 
-	logger.WithField("locator", locator).Debug("Call z_start_recv_loop")
-	errcode := C.z_start_recv_loop(z)
-	if errcode != 0 {
-		return nil, &ZError{"z_start_recv_loop failed", int(errcode)}
-	}
+	logger.WithField("locator", locator).Debug("Run z_recv_loop")
+	go C.z_recv_loop(z)
 
 	return z, nil
 }
@@ -95,11 +92,8 @@ func ZOpenWUP(locator string, uname string, passwd string) (*Zenoh, error) {
 	}
 	z := resultValueToZenoh(result.value)
 
-	logger.WithField("locator", locator).Debug("Call z_start_recv_loop")
-	errcode := C.z_start_recv_loop(z)
-	if errcode != 0 {
-		return nil, &ZError{"z_start_recv_loop failed", int(errcode)}
-	}
+	logger.WithField("locator", locator).Debug("Run z_recv_loop")
+	go C.z_recv_loop(z)
 
 	return z, nil
 }
