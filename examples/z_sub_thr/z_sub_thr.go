@@ -39,13 +39,11 @@ func main() {
 		locator = os.Args[1]
 	}
 
-	fmt.Printf("Connecting to %s...\n", locator)
 	z, err := zenoh.ZOpen(locator)
 	if err != nil {
 		panic(err.Error())
 	}
 
-	fmt.Printf("Declaring Subscriber...\n")
 	_, err = z.DeclareSubscriber("/test/thr", zenoh.NewSubMode(zenoh.ZPushMode), listener)
 	if err != nil {
 		panic(err.Error())
