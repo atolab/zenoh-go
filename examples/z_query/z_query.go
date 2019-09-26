@@ -48,7 +48,7 @@ func main() {
 	}
 
 	fmt.Println("Sending Query '" + uri + "'...")
-	err = z.Query(uri, "", replyHandler)
+	err = z.QueryWO(uri, "", replyHandler, zenoh.NewQueryDest(zenoh.ZAll), zenoh.NewQueryDest(zenoh.ZAll))
 	if err != nil {
 		panic(err.Error())
 	}
