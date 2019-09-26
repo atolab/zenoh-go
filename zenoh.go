@@ -445,6 +445,31 @@ func (z *Zenoh) Query(resource string, predicate string, callback ReplyCallback)
 	return nil
 }
 
+// Query a resource with a predicate
+func (z *Zenoh) QueryWO(resource string, predicate string, callback ReplyCallback, dest_storages QueryDest, dest_evals QueryDest) error {
+	r := C.CString(resource)
+	defer C.free(unsafe.Pointer(r))
+	p := C.CString(predicate)
+	defer C.free(unsafe.Pointer(p))
+
+	replyReg.mu.Lock()
+	defer replyReg.mu.Unlock()
+	replyReg.index++
+	for replyReg.fns[replyReg.index] != nil {
+		replyReg.index++
+	}
+	replyReg.fns[replyReg.index] = callback
+
+	result := C.z_query_wo(z, r, p,
+		(C.z_reply_callback_t)(unsafe.Pointer(C.reply_callback_cgo)),
+		unsafe.Pointer(uintptr(replyReg.index)),
+		dest_storages, dest_evals)
+	if result != 0 {
+		return &ZError{"z_query on " + resource + "failed", int(result)}
+	}
+	return nil
+}
+
 // UndeclareSubscriber undeclares a Subscriber
 func (z *Zenoh) UndeclareSubscriber(s *Subscriber) error {
 	result := C.z_undeclare_subscriber(s.zsub)
@@ -609,6 +634,33 @@ func NewSubMode(kind SubModeKind) SubMode {
 // NewSubModeWithTime returns a SubMode with the specified kind and temporal properties
 func NewSubModeWithTime(kind SubModeKind, origin C.ulong, period C.ulong, duration C.ulong) SubMode {
 	return SubMode{kind, C.z_temporal_property_t{origin, period, duration}}
+}
+
+// QueryDest is a Query destination
+type QueryDest = C.z_query_dest_t
+
+// QueryDestKind is the kind of a Query destination
+type QueryDestKind = C.uint8_t
+
+const (
+	// ZBestMatch : best matching storage or eval
+	ZBestMatch QueryDestKind = iota
+	// ZComplete : complete storage or eval
+	ZComplete QueryDestKind = iota
+	// ZAll : all storages or evals
+	ZAll QueryDestKind = iota
+	// ZNone : no storage or eval
+	ZNone QueryDestKind = iota
+)
+
+// NewQueryDest returns a QueryDest with the specified kind
+func NewQueryDest(kind QueryDestKind) QueryDest {
+	return QueryDest{kind, 1}
+}
+
+// NewQueryDestWithNb returns a QueryDest with the specified kind and nb
+func NewQueryDestWithNb(kind QueryDestKind, nb C.uint8_t) QueryDest {
+	return QueryDest{kind, nb}
 }
 
 // DataInfo is the information associated to a received data.
