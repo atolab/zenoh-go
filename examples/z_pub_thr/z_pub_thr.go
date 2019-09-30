@@ -24,12 +24,10 @@ func main() {
 		locator = os.Args[2]
 	}
 
-	vle := zenoh.VleEncode(length)
 	data := make([]byte, length)
 	for i := 0; i < length; i++ {
 		data[i] = byte(i % 10)
 	}
-	data = append(vle, data...)
 
 	z, err := zenoh.ZOpen(locator)
 	if err != nil {
