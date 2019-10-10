@@ -387,6 +387,15 @@ func (z *Zenoh) WriteDataWO(resource string, payload []byte, encoding uint8, kin
 	return nil
 }
 
+// Pull retrives data for a given pull-mode subscription
+func (s *Subscriber) Pull() error {
+	result := C.z_pull(s.zsub)
+	if result != 0 {
+		return &ZError{"z_pull failed", int(result)}
+	}
+	return nil
+}
+
 var nullCPtr = (*C.uchar)(unsafe.Pointer(nil))
 
 func bufferToC(buf []byte) (*C.uchar, C.ulong) {
