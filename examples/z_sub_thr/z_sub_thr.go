@@ -39,7 +39,7 @@ func main() {
 		locator = os.Args[1]
 	}
 
-	z, err := zenoh.ZOpen(locator)
+	z, err := zenoh.ZOpen(locator, nil)
 	if err != nil {
 		panic(err.Error())
 	}

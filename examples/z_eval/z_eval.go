@@ -35,7 +35,7 @@ func main() {
 	}
 
 	fmt.Println("Connecting to " + locator + "...")
-	z, err := zenoh.ZOpen("tcp/127.0.0.1:7447")
+	z, err := zenoh.ZOpen("tcp/127.0.0.1:7447", nil)
 	if err != nil {
 		panic(err.Error())
 	}

@@ -39,6 +39,13 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+const Z_INFO_PID_KEY = C.Z_INFO_PID_KEY
+const Z_INFO_PEER_KEY = C.Z_INFO_PEER_KEY
+const Z_INFO_PEER_PID_KEY = C.Z_INFO_PEER_PID_KEY
+
+const Z_USER_KEY = C.Z_USER_KEY
+const Z_PASSWD_KEY = C.Z_PASSWD_KEY
+
 // ZError reports an error that occured in the zenoh-c library
 type ZError struct {
 	msg  string
@@ -53,40 +60,19 @@ var logger = log.WithFields(log.Fields{" pkg": "zenoh"})
 
 // ZOpen opens a connection to a Zenoh broker specified by its locator.
 // The returned Zenoh can be used for requests on the Zenoh broker.
-func ZOpen(locator string) (*Zenoh, error) {
+func ZOpen(locator string, properties map[int]string) (*Zenoh, error) {
 	logger.WithField("locator", locator).Debug("ZOpen")
 
 	l := C.CString(locator)
 	defer C.free(unsafe.Pointer(l))
 
-	result := C.z_open(l, nil, nil)
-	if result.tag == C.Z_ERROR_TAG {
-		return nil, &ZError{"z_open on " + locator + " failed", resultValueToErrorCode(result.value)}
+	pvec := ((C.z_vec_t)(C.z_vec_make(C.uint(len(properties)))))
+	for k, v := range properties {
+		prop := ((*C.z_property_t)(C.z_property_make_from_str(C.ulong(k), C.CString(v))))
+		C.z_vec_append(&pvec, unsafe.Pointer(prop))
 	}
-	z := resultValueToZenoh(result.value)
 
-	logger.WithField("locator", locator).Debug("Run z_recv_loop")
-	go C.z_recv_loop(z)
-
-	return z, nil
-}
-
-// ZOpenWUP opens a connection to a Zenoh broker specified by its locator, using a username and a password.
-// The returned Zenoh can be used for requests on the Zenoh broker.
-func ZOpenWUP(locator string, uname string, passwd string) (*Zenoh, error) {
-	logger.WithFields(log.Fields{
-		"locator": locator,
-		"uname":   uname,
-	}).Debug("ZOpenWUP")
-
-	l := C.CString(locator)
-	defer C.free(unsafe.Pointer(l))
-	u := C.CString(uname)
-	defer C.free(unsafe.Pointer(u))
-	p := C.CString(passwd)
-	defer C.free(unsafe.Pointer(p))
-
-	result := C.z_open_wup(l, u, p)
+	result := C.z_open(l, nil, &pvec)
 	if result.tag == C.Z_ERROR_TAG {
 		return nil, &ZError{"z_open on " + locator + " failed", resultValueToErrorCode(result.value)}
 	}
@@ -113,18 +99,30 @@ func (z *Zenoh) Close() error {
 }
 
 // Info returns information about the Zenoh configuration and status.
-func (z *Zenoh) Info() map[string]string {
-	// TODO: copy all properties from z_vec_t
-	info := map[string]string{}
+func (z *Zenoh) Info() map[int]string {
+	var value strings.Builder
+	var buf []byte
+	info := map[int]string{}
 	cprops := C.z_info(z)
 
-	cpeerPid := ((*C.z_property_t)(C.z_vec_get(&cprops, C.Z_INFO_PEER_PID_KEY))).value
-	buf := C.GoBytes(unsafe.Pointer(cpeerPid.elem), C.int(cpeerPid.length))
-	var peerPid strings.Builder
+	cvalue := ((*C.z_property_t)(C.z_vec_get(&cprops, C.Z_INFO_PEER_KEY))).value
+	info[C.Z_INFO_PEER_KEY] = string(C.GoBytes(unsafe.Pointer(cvalue.elem), C.int(cvalue.length)))
+
+	cvalue = ((*C.z_property_t)(C.z_vec_get(&cprops, C.Z_INFO_PID_KEY))).value
+	buf = C.GoBytes(unsafe.Pointer(cvalue.elem), C.int(cvalue.length))
+	value.Reset()
 	for _, x := range buf {
-		peerPid.WriteString(fmt.Sprintf("%02x", x))
+		value.WriteString(fmt.Sprintf("%02x", x))
 	}
-	info["peer_pid"] = peerPid.String()
+	info[C.Z_INFO_PID_KEY] = value.String()
+
+	cvalue = ((*C.z_property_t)(C.z_vec_get(&cprops, C.Z_INFO_PEER_PID_KEY))).value
+	buf = C.GoBytes(unsafe.Pointer(cvalue.elem), C.int(cvalue.length))
+	value.Reset()
+	for _, x := range buf {
+		value.WriteString(fmt.Sprintf("%02x", x))
+	}
+	info[C.Z_INFO_PEER_PID_KEY] = value.String()
 
 	return info
 }

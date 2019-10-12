@@ -24,7 +24,7 @@ func main() {
 	}
 
 	fmt.Println("Connecting to " + locator + "...")
-	z, err := zenoh.ZOpenWUP(locator, "user", "password")
+	z, err := zenoh.ZOpen(locator, nil)
 	if err != nil {
 		panic(err.Error())
 	}
