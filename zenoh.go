@@ -13,15 +13,15 @@ package zenoh
 #include <zenoh/recv_loop.h>
 #include <zenoh/rname.h>
 
-// Forward declarations of callbacks (see callbacks.go)
-extern void subscriber_callback_cgo(const z_resource_id_t *rid, const unsigned char *data, size_t length, const z_data_info_t *info, void *arg);
-extern void storage_subscriber_callback_cgo(const z_resource_id_t *rid, const unsigned char *data, size_t length, const z_data_info_t *info, void *arg);
-extern void storage_query_handler_cgo(const char *rname, const char *predicate, replies_sender_t send_replies, void *query_handle, void *arg);
-extern void eval_query_handler_cgo(const char *rname, const char *predicate, replies_sender_t send_replies, void *query_handle, void *arg);
-extern void reply_callback_cgo(const z_reply_value_t *reply, void *arg);
+// Forward declarations of callbacks (see c_callbacks.go)
+extern void subscriber_handle_data_cgo(const z_resource_id_t *rid, const unsigned char *data, size_t length, const z_data_info_t *info, void *arg);
+extern void storage_handle_data_cgo(const z_resource_id_t *rid, const unsigned char *data, size_t length, const z_data_info_t *info, void *arg);
+extern void storage_handle_query_cgo(const char *rname, const char *predicate, z_replies_sender_t send_replies, void *query_handle, void *arg);
+extern void eval_handle_query_cgo(const char *rname, const char *predicate, z_replies_sender_t send_replies, void *query_handle, void *arg);
+extern void handle_reply_cgo(const z_reply_value_t *reply, void *arg);
 
-// Indirection since Go cannot call a C function pointer (replies_sender_t)
-inline void call_replies_sender(replies_sender_t send_replies, void *query_handle, z_array_resource_t *replies) {
+// Indirection since Go cannot call a C function pointer (z_replies_sender_t)
+inline void call_replies_sender(z_replies_sender_t send_replies, void *query_handle, z_array_resource_t *replies) {
 	send_replies(query_handle, *replies);
 }
 
@@ -127,34 +127,34 @@ func (z *Zenoh) Info() map[int]string {
 	return info
 }
 
-type subscriberCallbackRegistry struct {
-	mu    *sync.Mutex
-	index int
-	fns   map[int]SubscriberCallback
+type subscriberHandlersRegistry struct {
+	mu       *sync.Mutex
+	index    int
+	dHandler map[int]DataHandler
 }
 
-var subReg = subscriberCallbackRegistry{new(sync.Mutex), 0, make(map[int]SubscriberCallback)}
+var subReg = subscriberHandlersRegistry{new(sync.Mutex), 0, make(map[int]DataHandler)}
 
-//export callSubscriberCallback
-func callSubscriberCallback(rid *C.z_resource_id_t, data unsafe.Pointer, length C.size_t, info *C.z_data_info_t, arg unsafe.Pointer) {
+//export callSubscriberDataHandler
+func callSubscriberDataHandler(rid *C.z_resource_id_t, data unsafe.Pointer, length C.size_t, info *C.z_data_info_t, arg unsafe.Pointer) {
 	var rname string
 	if rid.kind == C.Z_STR_RES_ID {
 		rname = resIDToRName(rid.id)
 	} else {
-		fmt.Printf("INTERNAL ERROR: SubscriberCallback received a non-string z_resource_id_t with kind=%d\n", rid.kind)
+		fmt.Printf("INTERNAL ERROR: DataHandler received a non-string z_resource_id_t with kind=%d\n", rid.kind)
 		return
 	}
 
 	dataSlice := C.GoBytes(data, C.int(length))
 
-	// Note: 'arg' parameter is used to store the index of callback in subReg.fns. Don't use it as a real C memory address !!
+	// Note: 'arg' parameter is used to store the index of handler in subReg.dHandler. Don't use it as a real C memory address !!
 	index := uintptr(arg)
-	goCallback := subReg.fns[int(index)]
-	goCallback(rname, dataSlice, info)
+	goHandler := subReg.dHandler[int(index)]
+	goHandler(rname, dataSlice, info)
 }
 
 // DeclareSubscriber declares a Subscriber on a resource
-func (z *Zenoh) DeclareSubscriber(resource string, mode SubMode, callback SubscriberCallback) (*Subscriber, error) {
+func (z *Zenoh) DeclareSubscriber(resource string, mode SubMode, dataHandler DataHandler) (*Subscriber, error) {
 	logger.WithField("resource", resource).Debug("DeclareSubscriber")
 
 	r := C.CString(resource)
@@ -163,17 +163,17 @@ func (z *Zenoh) DeclareSubscriber(resource string, mode SubMode, callback Subscr
 	subReg.mu.Lock()
 	defer subReg.mu.Unlock()
 	subReg.index++
-	for subReg.fns[subReg.index] != nil {
+	for subReg.dHandler[subReg.index] != nil {
 		subReg.index++
 	}
-	subReg.fns[subReg.index] = callback
+	subReg.dHandler[subReg.index] = dataHandler
 
-	// Note: 'arg' parameter is used to store the index of callback in subReg.fns. Don't use it as a real C memory address !!
+	// Note: 'arg' parameter is used to store the index of handler in subReg.dHandler. Don't use it as a real C memory address !!
 	result := C.z_declare_subscriber(z, r, &mode,
-		(C.subscriber_callback_t)(unsafe.Pointer(C.subscriber_callback_cgo)),
+		(C.z_data_handler_t)(unsafe.Pointer(C.subscriber_handle_data_cgo)),
 		unsafe.Pointer(uintptr(subReg.index)))
 	if result.tag == C.Z_ERROR_TAG {
-		delete(subReg.fns, subReg.index)
+		delete(subReg.dHandler, subReg.index)
 		return nil, &ZError{"z_declare_subscriber for " + resource + " failed", resultValueToErrorCode(result.value)}
 	}
 
@@ -199,31 +199,31 @@ func (z *Zenoh) DeclarePublisher(resource string) (*Publisher, error) {
 	return resultValueToPublisher(result.value), nil
 }
 
-type storageCallbacksRegistry struct {
+type storageHandlersRegistry struct {
 	mu       *sync.Mutex
 	index    int
-	subCb    map[int]SubscriberCallback
+	dHandler map[int]DataHandler
 	qHandler map[int]QueryHandler
 }
 
-var stoCbReg = storageCallbacksRegistry{new(sync.Mutex), 0, make(map[int]SubscriberCallback), make(map[int]QueryHandler)}
+var stoHdlReg = storageHandlersRegistry{new(sync.Mutex), 0, make(map[int]DataHandler), make(map[int]QueryHandler)}
 
-//export callStorageSubscriberCallback
-func callStorageSubscriberCallback(rid *C.z_resource_id_t, data unsafe.Pointer, length C.size_t, info *C.z_data_info_t, arg unsafe.Pointer) {
+//export callStorageDataHandler
+func callStorageDataHandler(rid *C.z_resource_id_t, data unsafe.Pointer, length C.size_t, info *C.z_data_info_t, arg unsafe.Pointer) {
 	var rname string
 	if rid.kind == C.Z_STR_RES_ID {
 		rname = resIDToRName(rid.id)
 	} else {
-		fmt.Printf("INTERNAL ERROR: StorageSubscriberCallback received a non-string z_resource_id_t with kind=%d\n", rid.kind)
+		fmt.Printf("INTERNAL ERROR: DataHandler received a non-string z_resource_id_t with kind=%d\n", rid.kind)
 		return
 	}
 
 	dataSlice := C.GoBytes(data, C.int(length))
 
-	// Note: 'arg' parameter is used to store the index of callback in stoCbReg.subCb. Don't use it as a real C memory address !!
+	// Note: 'arg' parameter is used to store the index of handler in stoHdlReg.subCb. Don't use it as a real C memory address !!
 	index := uintptr(arg)
-	goCallback := stoCbReg.subCb[int(index)]
-	goCallback(rname, dataSlice, info)
+	goHandler := stoHdlReg.dHandler[int(index)]
+	goHandler(rname, dataSlice, info)
 }
 
 //export callStorageQueryHandler
@@ -231,40 +231,40 @@ func callStorageQueryHandler(rname *C.char, predicate *C.char, sendReplies unsaf
 	goRname := C.GoString(rname)
 	goPredicate := C.GoString(predicate)
 	goRepliesSender := new(RepliesSender)
-	goRepliesSender.sendRepliesFunc = C.replies_sender_t(sendReplies)
+	goRepliesSender.sendRepliesFunc = C.z_replies_sender_t(sendReplies)
 	goRepliesSender.queryHandle = queryHandle
 
-	// Note: 'arg' parameter is used to store the index of callback in stoCbReg.qHandler. Don't use it as a real C memory address !!
+	// Note: 'arg' parameter is used to store the index of handler in stoHdlReg.qHandler. Don't use it as a real C memory address !!
 	index := uintptr(arg)
-	goCallback := stoCbReg.qHandler[int(index)]
-	goCallback(goRname, goPredicate, goRepliesSender)
+	goHandler := stoHdlReg.qHandler[int(index)]
+	goHandler(goRname, goPredicate, goRepliesSender)
 }
 
 // DeclareStorage declares a Storage on a resource
-func (z *Zenoh) DeclareStorage(resource string, callback SubscriberCallback, handler QueryHandler) (*Storage, error) {
+func (z *Zenoh) DeclareStorage(resource string, dataHandler DataHandler, queryHandler QueryHandler) (*Storage, error) {
 	logger.WithField("resource", resource).Debug("DeclareStorage")
 
 	r := C.CString(resource)
 	defer C.free(unsafe.Pointer(r))
 
-	stoCbReg.mu.Lock()
-	defer stoCbReg.mu.Unlock()
+	stoHdlReg.mu.Lock()
+	defer stoHdlReg.mu.Unlock()
 
-	stoCbReg.index++
-	for stoCbReg.subCb[stoCbReg.index] != nil {
-		stoCbReg.index++
+	stoHdlReg.index++
+	for stoHdlReg.dHandler[stoHdlReg.index] != nil {
+		stoHdlReg.index++
 	}
-	stoCbReg.subCb[stoCbReg.index] = callback
-	stoCbReg.qHandler[stoCbReg.index] = handler
+	stoHdlReg.dHandler[stoHdlReg.index] = dataHandler
+	stoHdlReg.qHandler[stoHdlReg.index] = queryHandler
 
-	// Note: 'arg' parameter is used to store the index of callbacks in stoCbReg. Don't use it as a real C memory address !!
+	// Note: 'arg' parameter is used to store the index of handler in stoHdlReg. Don't use it as a real C memory address !!
 	result := C.z_declare_storage(z, r,
-		(C.subscriber_callback_t)(unsafe.Pointer(C.storage_subscriber_callback_cgo)),
-		(C.query_handler_t)(unsafe.Pointer(C.storage_query_handler_cgo)),
-		unsafe.Pointer(uintptr(stoCbReg.index)))
+		(C.z_data_handler_t)(unsafe.Pointer(C.storage_handle_data_cgo)),
+		(C.z_query_handler_t)(unsafe.Pointer(C.storage_handle_query_cgo)),
+		unsafe.Pointer(uintptr(stoHdlReg.index)))
 	if result.tag == C.Z_ERROR_TAG {
-		delete(stoCbReg.subCb, stoCbReg.index)
-		delete(stoCbReg.qHandler, stoCbReg.index)
+		delete(stoHdlReg.dHandler, stoHdlReg.index)
+		delete(stoHdlReg.qHandler, stoHdlReg.index)
 		return nil, &ZError{"z_declare_storage for " + resource + " failed", resultValueToErrorCode(result.value)}
 	}
 
@@ -275,26 +275,26 @@ func (z *Zenoh) DeclareStorage(resource string, callback SubscriberCallback, han
 	return storage, nil
 }
 
-type evalCallbacksRegistry struct {
+type evalHandlersRegistry struct {
 	mu       *sync.Mutex
 	index    int
 	qHandler map[int]QueryHandler
 }
 
-var evalCbReg = evalCallbacksRegistry{new(sync.Mutex), 0, make(map[int]QueryHandler)}
+var evalHdlReg = evalHandlersRegistry{new(sync.Mutex), 0, make(map[int]QueryHandler)}
 
 //export callEvalQueryHandler
 func callEvalQueryHandler(rname *C.char, predicate *C.char, sendReplies unsafe.Pointer, queryHandle unsafe.Pointer, arg unsafe.Pointer) {
 	goRname := C.GoString(rname)
 	goPredicate := C.GoString(predicate)
 	goRepliesSender := new(RepliesSender)
-	goRepliesSender.sendRepliesFunc = C.replies_sender_t(sendReplies)
+	goRepliesSender.sendRepliesFunc = C.z_replies_sender_t(sendReplies)
 	goRepliesSender.queryHandle = queryHandle
 
-	// Note: 'arg' parameter is used to store the index of callback in evalCbReg.qHandler. Don't use it as a real C memory address !!
+	// Note: 'arg' parameter is used to store the index of handler in evalHdlReg.qHandler. Don't use it as a real C memory address !!
 	index := uintptr(arg)
-	goCallback := evalCbReg.qHandler[int(index)]
-	goCallback(goRname, goPredicate, goRepliesSender)
+	goHandler := evalHdlReg.qHandler[int(index)]
+	goHandler(goRname, goPredicate, goRepliesSender)
 }
 
 // DeclareEval declares a Eval on a resource
@@ -304,27 +304,27 @@ func (z *Zenoh) DeclareEval(resource string, handler QueryHandler) (*Eval, error
 	r := C.CString(resource)
 	defer C.free(unsafe.Pointer(r))
 
-	evalCbReg.mu.Lock()
-	defer evalCbReg.mu.Unlock()
+	evalHdlReg.mu.Lock()
+	defer evalHdlReg.mu.Unlock()
 
-	evalCbReg.index++
-	for evalCbReg.qHandler[evalCbReg.index] != nil {
-		evalCbReg.index++
+	evalHdlReg.index++
+	for evalHdlReg.qHandler[evalHdlReg.index] != nil {
+		evalHdlReg.index++
 	}
-	evalCbReg.qHandler[evalCbReg.index] = handler
+	evalHdlReg.qHandler[evalHdlReg.index] = handler
 
-	// Note: 'arg' parameter is used to store the index of callbacks in evalCbReg. Don't use it as a real C memory address !!
+	// Note: 'arg' parameter is used to store the index of handler in evalHdlReg. Don't use it as a real C memory address !!
 	result := C.z_declare_eval(z, r,
-		(C.query_handler_t)(unsafe.Pointer(C.eval_query_handler_cgo)),
-		unsafe.Pointer(uintptr(evalCbReg.index)))
+		(C.z_query_handler_t)(unsafe.Pointer(C.eval_handle_query_cgo)),
+		unsafe.Pointer(uintptr(evalHdlReg.index)))
 	if result.tag == C.Z_ERROR_TAG {
-		delete(evalCbReg.qHandler, evalCbReg.index)
+		delete(evalHdlReg.qHandler, evalHdlReg.index)
 		return nil, &ZError{"z_declare_eval for " + resource + " failed", resultValueToErrorCode(result.value)}
 	}
 
 	eval := new(Eval)
 	eval.zeval = resultValueToEval(result.value)
-	eval.regIndex = evalCbReg.index
+	eval.regIndex = evalHdlReg.index
 
 	return eval, nil
 }
@@ -413,23 +413,23 @@ func RNameIntersect(rname1 string, rname2 string) bool {
 	return C.intersect(r1, r2) != 0
 }
 
-type replyCallbackRegistry struct {
-	mu    *sync.Mutex
-	index int
-	fns   map[int]ReplyCallback
+type replyHandlersRegistry struct {
+	mu       *sync.Mutex
+	index    int
+	rHandler map[int]ReplyHandler
 }
 
-var replyReg = replyCallbackRegistry{new(sync.Mutex), 0, make(map[int]ReplyCallback)}
+var replyReg = replyHandlersRegistry{new(sync.Mutex), 0, make(map[int]ReplyHandler)}
 
-//export callReplyCallback
-func callReplyCallback(reply *C.z_reply_value_t, arg unsafe.Pointer) {
+//export callReplyHandler
+func callReplyHandler(reply *C.z_reply_value_t, arg unsafe.Pointer) {
 	index := uintptr(arg)
-	goCallback := replyReg.fns[int(index)]
-	goCallback(reply)
+	goHandler := replyReg.rHandler[int(index)]
+	goHandler(reply)
 }
 
 // Query a resource with a predicate
-func (z *Zenoh) Query(resource string, predicate string, callback ReplyCallback) error {
+func (z *Zenoh) Query(resource string, predicate string, replyHandler ReplyHandler) error {
 	r := C.CString(resource)
 	defer C.free(unsafe.Pointer(r))
 	p := C.CString(predicate)
@@ -438,13 +438,13 @@ func (z *Zenoh) Query(resource string, predicate string, callback ReplyCallback)
 	replyReg.mu.Lock()
 	defer replyReg.mu.Unlock()
 	replyReg.index++
-	for replyReg.fns[replyReg.index] != nil {
+	for replyReg.rHandler[replyReg.index] != nil {
 		replyReg.index++
 	}
-	replyReg.fns[replyReg.index] = callback
+	replyReg.rHandler[replyReg.index] = replyHandler
 
 	result := C.z_query(z, r, p,
-		(C.z_reply_callback_t)(unsafe.Pointer(C.reply_callback_cgo)),
+		(C.z_reply_handler_t)(unsafe.Pointer(C.handle_reply_cgo)),
 		unsafe.Pointer(uintptr(replyReg.index)))
 	if result != 0 {
 		return &ZError{"z_query on " + resource + "failed", int(result)}
@@ -453,7 +453,7 @@ func (z *Zenoh) Query(resource string, predicate string, callback ReplyCallback)
 }
 
 // Query a resource with a predicate
-func (z *Zenoh) QueryWO(resource string, predicate string, callback ReplyCallback, dest_storages QueryDest, dest_evals QueryDest) error {
+func (z *Zenoh) QueryWO(resource string, predicate string, replyHandler ReplyHandler, dest_storages QueryDest, dest_evals QueryDest) error {
 	r := C.CString(resource)
 	defer C.free(unsafe.Pointer(r))
 	p := C.CString(predicate)
@@ -462,13 +462,13 @@ func (z *Zenoh) QueryWO(resource string, predicate string, callback ReplyCallbac
 	replyReg.mu.Lock()
 	defer replyReg.mu.Unlock()
 	replyReg.index++
-	for replyReg.fns[replyReg.index] != nil {
+	for replyReg.rHandler[replyReg.index] != nil {
 		replyReg.index++
 	}
-	replyReg.fns[replyReg.index] = callback
+	replyReg.rHandler[replyReg.index] = replyHandler
 
 	result := C.z_query_wo(z, r, p,
-		(C.z_reply_callback_t)(unsafe.Pointer(C.reply_callback_cgo)),
+		(C.z_reply_handler_t)(unsafe.Pointer(C.handle_reply_cgo)),
 		unsafe.Pointer(uintptr(replyReg.index)),
 		dest_storages, dest_evals)
 	if result != 0 {
@@ -484,7 +484,7 @@ func (z *Zenoh) UndeclareSubscriber(s *Subscriber) error {
 		return &ZError{"z_undeclare_subscriber failed", int(result)}
 	}
 	subReg.mu.Lock()
-	delete(subReg.fns, s.regIndex)
+	delete(subReg.dHandler, s.regIndex)
 	subReg.mu.Unlock()
 
 	return nil
@@ -505,10 +505,10 @@ func (z *Zenoh) UndeclareStorage(s *Storage) error {
 	if result != 0 {
 		return &ZError{"z_undeclare_storage failed", int(result)}
 	}
-	stoCbReg.mu.Lock()
-	delete(stoCbReg.subCb, s.regIndex)
-	delete(stoCbReg.qHandler, s.regIndex)
-	stoCbReg.mu.Unlock()
+	stoHdlReg.mu.Lock()
+	delete(stoHdlReg.dHandler, s.regIndex)
+	delete(stoHdlReg.qHandler, s.regIndex)
+	stoHdlReg.mu.Unlock()
 
 	return nil
 }
@@ -519,9 +519,9 @@ func (z *Zenoh) UndeclareEval(e *Eval) error {
 	if result != 0 {
 		return &ZError{"z_undeclare_eval failed", int(result)}
 	}
-	evalCbReg.mu.Lock()
-	delete(evalCbReg.qHandler, e.regIndex)
-	evalCbReg.mu.Unlock()
+	evalHdlReg.mu.Lock()
+	delete(evalHdlReg.qHandler, e.regIndex)
+	evalHdlReg.mu.Unlock()
 
 	return nil
 }
@@ -556,7 +556,7 @@ type Eval struct {
 
 // RepliesSender is used in a storage's and eval's QueryHandler() implementation when sending back replies to a query.
 type RepliesSender struct {
-	sendRepliesFunc C.replies_sender_t
+	sendRepliesFunc C.z_replies_sender_t
 	queryHandle     unsafe.Pointer
 }
 
@@ -607,14 +607,14 @@ type Resource struct {
 	Kind     uint8
 }
 
-// SubscriberCallback is the callback to be implemented for the reception of subscribed resources (subscriber or storage)
-type SubscriberCallback func(rid string, data []byte, info *DataInfo)
+// DataHandler is the callback to be implemented for the reception of data (subscriber or storage)
+type DataHandler func(rid string, data []byte, info *DataInfo)
 
-// QueryHandler is the callback to be implemented for the reception of a query by a storage
+// QueryHandler is the callback to be implemented for the reception of a query by a storage or eval
 type QueryHandler func(rname string, predicate string, sendReplies *RepliesSender)
 
-// ReplyCallback is the callback to be implemented for the reception of a query results
-type ReplyCallback func(reply *ReplyValue)
+// ReplyHandler is the callback to be implemented for the reception of a query replies
+type ReplyHandler func(reply *ReplyValue)
 
 // SubMode is a Subscriber mode
 type SubMode = C.z_sub_mode_t
