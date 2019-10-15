@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/hex"
 	"fmt"
 	"os"
 
@@ -14,18 +15,18 @@ func main() {
 	}
 
 	fmt.Println("Connecting to " + locator + "...")
-	properties := map[int]string{
-		zenoh.Z_USER_KEY:   "user",
-		zenoh.Z_PASSWD_KEY: "password"}
+	properties := map[int][]byte{
+		zenoh.Z_USER_KEY:   []byte("user"),
+		zenoh.Z_PASSWD_KEY: []byte("password")}
 	z, err := zenoh.ZOpen(locator, properties)
 	if err != nil {
 		panic(err.Error())
 	}
 
 	info := z.Info()
-	fmt.Println("LOCATOR :  " + info[zenoh.Z_INFO_PEER_KEY])
-	fmt.Println("PID :      " + info[zenoh.Z_INFO_PID_KEY])
-	fmt.Println("PEER PID : " + info[zenoh.Z_INFO_PEER_PID_KEY])
+	fmt.Println("LOCATOR :  " + string(info[zenoh.Z_INFO_PEER_KEY]))
+	fmt.Println("PID :      " + hex.EncodeToString(info[zenoh.Z_INFO_PID_KEY]))
+	fmt.Println("PEER PID : " + hex.EncodeToString(info[zenoh.Z_INFO_PEER_PID_KEY]))
 
 	z.Close()
 }

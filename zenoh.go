@@ -32,7 +32,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"strconv"
-	"strings"
 	"sync"
 	"unsafe"
 
@@ -60,7 +59,7 @@ var logger = log.WithFields(log.Fields{" pkg": "zenoh"})
 
 // ZOpen opens a connection to a Zenoh broker specified by its locator.
 // The returned Zenoh can be used for requests on the Zenoh broker.
-func ZOpen(locator string, properties map[int]string) (*Zenoh, error) {
+func ZOpen(locator string, properties map[int][]byte) (*Zenoh, error) {
 	logger.WithField("locator", locator).Debug("ZOpen")
 
 	l := C.CString(locator)
@@ -68,7 +67,8 @@ func ZOpen(locator string, properties map[int]string) (*Zenoh, error) {
 
 	pvec := ((C.z_vec_t)(C.z_vec_make(C.uint(len(properties)))))
 	for k, v := range properties {
-		prop := ((*C.z_property_t)(C.z_property_make_from_str(C.ulong(k), C.CString(v))))
+		value := C.z_array_uint8_t{length: C.uint(len(v)), elem: (*C.uchar)(unsafe.Pointer(&v[0]))}
+		prop := ((*C.z_property_t)(C.z_property_make(C.ulong(k), value)))
 		C.z_vec_append(&pvec, unsafe.Pointer(prop))
 	}
 
@@ -99,31 +99,14 @@ func (z *Zenoh) Close() error {
 }
 
 // Info returns information about the Zenoh configuration and status.
-func (z *Zenoh) Info() map[int]string {
-	var value strings.Builder
-	var buf []byte
-	info := map[int]string{}
+func (z *Zenoh) Info() map[int][]byte {
+	info := map[int][]byte{}
 	cprops := C.z_info(z)
-
-	cvalue := ((*C.z_property_t)(C.z_vec_get(&cprops, C.Z_INFO_PEER_KEY))).value
-	info[C.Z_INFO_PEER_KEY] = string(C.GoBytes(unsafe.Pointer(cvalue.elem), C.int(cvalue.length)))
-
-	cvalue = ((*C.z_property_t)(C.z_vec_get(&cprops, C.Z_INFO_PID_KEY))).value
-	buf = C.GoBytes(unsafe.Pointer(cvalue.elem), C.int(cvalue.length))
-	value.Reset()
-	for _, x := range buf {
-		value.WriteString(fmt.Sprintf("%02x", x))
+	propslength := int(C.z_vec_length(&cprops))
+	for i := 0; i < propslength; i++ {
+		cvalue := ((*C.z_property_t)(C.z_vec_get(&cprops, C.uint(i)))).value
+		info[i] = C.GoBytes(unsafe.Pointer(cvalue.elem), C.int(cvalue.length))
 	}
-	info[C.Z_INFO_PID_KEY] = value.String()
-
-	cvalue = ((*C.z_property_t)(C.z_vec_get(&cprops, C.Z_INFO_PEER_PID_KEY))).value
-	buf = C.GoBytes(unsafe.Pointer(cvalue.elem), C.int(cvalue.length))
-	value.Reset()
-	for _, x := range buf {
-		value.WriteString(fmt.Sprintf("%02x", x))
-	}
-	info[C.Z_INFO_PEER_PID_KEY] = value.String()
-
 	return info
 }
 
