@@ -713,9 +713,9 @@ func (r *ReplyValue) Kind() ReplyKind {
 	return ReplyKind(r.kind)
 }
 
-// Stoid returns the StorageId of the storage that sent this reply
-func (r *ReplyValue) Stoid() []byte {
-	return C.GoBytes(unsafe.Pointer(r.stoid), C.int(r.stoid_length))
+// SrcId returns the unique id of the storage or eval that sent this reply
+func (r *ReplyValue) SrcId() []byte {
+	return C.GoBytes(unsafe.Pointer(r.srcid), C.int(r.srcid_length))
 }
 
 // RSN returns the request sequence number
