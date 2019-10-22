@@ -21,7 +21,7 @@ extern void eval_handle_query_cgo(const char *rname, const char *predicate, z_re
 extern void handle_reply_cgo(const z_reply_value_t *reply, void *arg);
 
 // Indirection since Go cannot call a C function pointer (z_replies_sender_t)
-inline void call_replies_sender(z_replies_sender_t send_replies, void *query_handle, z_array_resource_t *replies) {
+inline void call_replies_sender(z_replies_sender_t send_replies, void *query_handle, z_array_p_resource_t *replies) {
 	send_replies(query_handle, *replies);
 }
 
@@ -548,8 +548,8 @@ var sizeofUintptr = int(unsafe.Sizeof(uintptr(0)))
 // SendReplies sends the replies to a query on a storage.
 // This operation should be called in the implementation of a QueryHandler
 func (rs *RepliesSender) SendReplies(replies []Resource) {
-	// Convert []Resource into z_array_resource_t
-	array := new(C.z_array_resource_t)
+	// Convert []Resource into z_array_p_resource_t
+	array := new(C.z_array_p_resource_t)
 	if replies == nil {
 		array.length = 0
 		array.elem = nil
