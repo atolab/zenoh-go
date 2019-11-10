@@ -9,7 +9,7 @@ import (
 )
 
 func main() {
-	locator := "tcp/127.0.0.1:7447"
+	var locator *string
 	if len(os.Args) < 2 {
 		fmt.Printf("USAGE:\n\tz_pub_thr <payload-size> [<zenoh-locator>]\n\n")
 		os.Exit(-1)
@@ -21,7 +21,7 @@ func main() {
 	}
 	fmt.Printf("Running throughput test for payload of %d bytes\n", length)
 	if len(os.Args) > 2 {
-		locator = os.Args[2]
+		locator = &os.Args[2]
 	}
 
 	data := make([]byte, length)

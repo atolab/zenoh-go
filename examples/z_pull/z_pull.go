@@ -14,9 +14,9 @@ func listener(rid string, data []byte, info *zenoh.DataInfo) {
 }
 
 func main() {
-	locator := "tcp/127.0.0.1:7447"
+	var locator *string
 	if len(os.Args) > 1 {
-		locator = os.Args[1]
+		locator = &os.Args[1]
 	}
 
 	uri := "/demo/example/**"
@@ -24,7 +24,7 @@ func main() {
 		uri = os.Args[2]
 	}
 
-	fmt.Println("Connecting to " + locator + "...")
+	fmt.Println("Openning session...")
 	z, err := zenoh.ZOpen(locator, nil)
 	if err != nil {
 		panic(err.Error())
@@ -36,6 +36,7 @@ func main() {
 		panic(err.Error())
 	}
 
+	fmt.Println("Press <enter> to pull data...")
 	reader := bufio.NewReader(os.Stdin)
 	var c rune
 	for c != 'q' {

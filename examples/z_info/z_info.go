@@ -9,12 +9,12 @@ import (
 )
 
 func main() {
-	locator := "tcp/127.0.0.1:7447"
+	var locator *string
 	if len(os.Args) > 1 {
-		locator = os.Args[1]
+		locator = &os.Args[1]
 	}
 
-	fmt.Println("Connecting to " + locator + "...")
+	fmt.Println("Openning session...")
 	properties := map[int][]byte{
 		zenoh.Z_USER_KEY:   []byte("user"),
 		zenoh.Z_PASSWD_KEY: []byte("password")}

@@ -34,9 +34,9 @@ func listener(rid string, data []byte, info *zenoh.DataInfo) {
 }
 
 func main() {
-	locator := "tcp/127.0.0.1:7447"
+	var locator *string
 	if len(os.Args) > 1 {
-		locator = os.Args[1]
+		locator = &os.Args[1]
 	}
 
 	z, err := zenoh.ZOpen(locator, nil)

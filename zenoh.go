@@ -65,11 +65,8 @@ var logger = log.WithFields(log.Fields{" pkg": "zenoh"})
 // 'properties' will typically contain the username and password informations needed to establish the zenoh session with a secured infrastructure.
 // It can be set to "nil".
 // Return a handle to the zenoh session.
-func ZOpen(locator string, properties map[int][]byte) (*Zenoh, error) {
+func ZOpen(locator *string, properties map[int][]byte) (*Zenoh, error) {
 	logger.WithField("locator", locator).Debug("ZOpen")
-
-	l := C.CString(locator)
-	defer C.free(unsafe.Pointer(l))
 
 	pvec := ((C.z_vec_t)(C.z_vec_make(C.uint(len(properties)))))
 	for k, v := range properties {
@@ -78,9 +75,15 @@ func ZOpen(locator string, properties map[int][]byte) (*Zenoh, error) {
 		C.z_vec_append(&pvec, unsafe.Pointer(prop))
 	}
 
+	var l *C.char
+	if locator != nil {
+		l := C.CString(*locator)
+		defer C.free(unsafe.Pointer(l))
+	}
+
 	result := C.z_open(l, nil, &pvec)
 	if result.tag == C.Z_ERROR_TAG {
-		return nil, &ZError{"z_open on " + locator + " failed", resultValueToErrorCode(result.value)}
+		return nil, &ZError{"z_open failed", resultValueToErrorCode(result.value)}
 	}
 	z := resultValueToZenoh(result.value)
 

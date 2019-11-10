@@ -31,9 +31,9 @@ func replyHandler(reply *zenoh.ReplyValue) {
 }
 
 func main() {
-	locator := "tcp/127.0.0.1:7447"
+	var locator *string
 	if len(os.Args) > 1 {
-		locator = os.Args[1]
+		locator = &os.Args[1]
 	}
 
 	uri := "/demo/example/**"
@@ -41,7 +41,7 @@ func main() {
 		uri = os.Args[2]
 	}
 
-	fmt.Println("Connecting to " + locator + "...")
+	fmt.Println("Openning session...")
 	z, err := zenoh.ZOpen(locator, nil)
 	if err != nil {
 		panic(err.Error())

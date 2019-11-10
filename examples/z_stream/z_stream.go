@@ -9,9 +9,9 @@ import (
 )
 
 func main() {
-	locator := "tcp/127.0.0.1:7447"
+	var locator *string
 	if len(os.Args) > 1 {
-		locator = os.Args[1]
+		locator = &os.Args[1]
 	}
 
 	uri := "/demo/example/zenoh-go-stream"
@@ -24,7 +24,7 @@ func main() {
 		value = os.Args[3]
 	}
 
-	fmt.Println("Connecting to " + locator + "...")
+	fmt.Println("Openning session...")
 	z, err := zenoh.ZOpen(locator, nil)
 	if err != nil {
 		panic(err.Error())

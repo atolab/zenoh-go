@@ -24,9 +24,9 @@ func queryHandler(rname string, predicate string, repliesSender *zenoh.RepliesSe
 
 func main() {
 
-	locator := "tcp/127.0.0.1:7447"
+	var locator *string
 	if len(os.Args) > 1 {
-		locator = os.Args[1]
+		locator = &os.Args[1]
 	}
 
 	uri = "/demo/example/zenoh-go-eval"
@@ -34,8 +34,8 @@ func main() {
 		uri = os.Args[2]
 	}
 
-	fmt.Println("Connecting to " + locator + "...")
-	z, err := zenoh.ZOpen("tcp/127.0.0.1:7447", nil)
+	fmt.Println("Openning session...")
+	z, err := zenoh.ZOpen(locator, nil)
 	if err != nil {
 		panic(err.Error())
 	}
