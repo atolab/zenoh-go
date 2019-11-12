@@ -32,6 +32,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
+	"runtime/debug"
 	"strconv"
 	"sync"
 	"time"
@@ -143,6 +144,14 @@ func callSubscriberDataHandler(rid *C.z_resource_id_t, data unsafe.Pointer, leng
 	// Note: 'arg' parameter is used to store the index of handler in subReg.dHandler. Don't use it as a real C memory address !!
 	index := uintptr(arg)
 	goHandler := subReg.dHandler[int(index)]
+
+	defer func() {
+		if r := recover(); r != nil {
+			logger.WithField("resource", rname).WithField("error", r).Warn("error in subscriber data handler for")
+			debug.PrintStack()
+		}
+	}()
+
 	goHandler(rname, dataSlice, info)
 }
 
@@ -222,6 +231,14 @@ func callStorageDataHandler(rid *C.z_resource_id_t, data unsafe.Pointer, length 
 	// Note: 'arg' parameter is used to store the index of handler in stoHdlReg.subCb. Don't use it as a real C memory address !!
 	index := uintptr(arg)
 	goHandler := stoHdlReg.dHandler[int(index)]
+
+	defer func() {
+		if r := recover(); r != nil {
+			logger.WithField("resource", rname).WithField("error", r).Warn("error in storage data handler")
+			debug.PrintStack()
+		}
+	}()
+
 	goHandler(rname, dataSlice, info)
 }
 
@@ -236,6 +253,15 @@ func callStorageQueryHandler(rname *C.char, predicate *C.char, sendReplies unsaf
 	// Note: 'arg' parameter is used to store the index of handler in stoHdlReg.qHandler. Don't use it as a real C memory address !!
 	index := uintptr(arg)
 	goHandler := stoHdlReg.qHandler[int(index)]
+
+	defer func() {
+		if r := recover(); r != nil {
+			logger.WithField("resource", rname).WithField("error", r).Warn("error in query handle for storage")
+			debug.PrintStack()
+			goRepliesSender.SendReplies([]Resource{})
+		}
+	}()
+
 	goHandler(goRname, goPredicate, goRepliesSender)
 }
 
@@ -298,6 +324,15 @@ func callEvalQueryHandler(rname *C.char, predicate *C.char, sendReplies unsafe.P
 	// Note: 'arg' parameter is used to store the index of handler in evalHdlReg.qHandler. Don't use it as a real C memory address !!
 	index := uintptr(arg)
 	goHandler := evalHdlReg.qHandler[int(index)]
+
+	defer func() {
+		if r := recover(); r != nil {
+			logger.WithField("resource", rname).WithField("error", r).Warn("error in query handle for eval")
+			debug.PrintStack()
+			goRepliesSender.SendReplies([]Resource{})
+		}
+	}()
+
 	goHandler(goRname, goPredicate, goRepliesSender)
 }
 
