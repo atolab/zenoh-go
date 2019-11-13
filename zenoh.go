@@ -60,8 +60,9 @@ func (e *ZError) Error() string {
 
 var logger = log.WithFields(log.Fields{" pkg": "zenoh"})
 
-// Open a zenoh session with the infrastructure component (zenoh router, zenoh broker, ...) reachable at location 'locator'.
-// 'locator' is a string representation of a network endpoint. A typical locator looks like this : "tcp/127.0.0.1:7447".
+// Open a zenoh session.
+// 'locator' is a pointer to a string representing the network endpoint to which establish the session. A typical locator looks like this : ``tcp/127.0.0.1:7447``.
+// If 'locator' is "nil", 'open' will scout and try to establish the session automatically.
 // 'properties' is a map of properties that will be used to establish and configure the zenoh session.
 // 'properties' will typically contain the username and password informations needed to establish the zenoh session with a secured infrastructure.
 // It can be set to "nil".
