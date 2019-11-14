@@ -8,19 +8,19 @@ import (
 )
 
 func main() {
-	var locator *string
-	if len(os.Args) > 1 {
-		locator = &os.Args[1]
-	}
-
 	uri := "/demo/example/zenoh-go-write"
-	if len(os.Args) > 2 {
-		uri = os.Args[2]
+	if len(os.Args) > 1 {
+		uri = os.Args[1]
 	}
 
 	value := "Write from Go!"
+	if len(os.Args) > 2 {
+		value = os.Args[2]
+	}
+
+	var locator *string
 	if len(os.Args) > 3 {
-		value = os.Args[3]
+		locator = &os.Args[3]
 	}
 
 	fmt.Println("Openning session...")

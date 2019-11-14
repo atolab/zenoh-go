@@ -23,15 +23,14 @@ func queryHandler(rname string, predicate string, repliesSender *zenoh.RepliesSe
 }
 
 func main() {
-
-	var locator *string
+	uri = "/demo/example/zenoh-go-eval"
 	if len(os.Args) > 1 {
-		locator = &os.Args[1]
+		uri = os.Args[1]
 	}
 
-	uri = "/demo/example/zenoh-go-eval"
+	var locator *string
 	if len(os.Args) > 2 {
-		uri = os.Args[2]
+		locator = &os.Args[2]
 	}
 
 	fmt.Println("Openning session...")
