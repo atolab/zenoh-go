@@ -41,12 +41,25 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-const Z_INFO_PID_KEY = C.Z_INFO_PID_KEY
-const Z_INFO_PEER_KEY = C.Z_INFO_PEER_KEY
-const Z_INFO_PEER_PID_KEY = C.Z_INFO_PEER_PID_KEY
+// ZInfoPidKey is the key for the PID value in the properties
+// map returned by the Info() operation.
+const ZInfoPidKey = C.Z_INFO_PID_KEY
 
-const Z_USER_KEY = C.Z_USER_KEY
-const Z_PASSWD_KEY = C.Z_PASSWD_KEY
+// ZInfoPeerKey is the key for the peer value in the properties
+// map returned by the Info() operation.
+const ZInfoPeerKey = C.Z_INFO_PEER_KEY
+
+// ZInfoPeerPidKey is the key for the peer's PID value in the properties
+// map returned by the Info() operation.
+const ZInfoPeerPidKey = C.Z_INFO_PEER_PID_KEY
+
+// ZUserKey is the key for the (optional) user's name in the properties
+// map passed to the Login() operation.
+const ZUserKey = C.Z_USER_KEY
+
+// ZPasswdKey is the key for the (optional) user's password in the properties
+// map passed to the Login() operation.
+const ZPasswdKey = C.Z_PASSWD_KEY
 
 // ZError reports an error that occured in the zenoh-c library
 type ZError struct {
@@ -54,13 +67,14 @@ type ZError struct {
 	code int
 }
 
+// Error returns the message associated to a ZError
 func (e *ZError) Error() string {
 	return e.msg + " (error code:" + strconv.Itoa(e.code) + ")"
 }
 
 var logger = log.WithFields(log.Fields{" pkg": "zenoh"})
 
-// Open a zenoh session.
+// ZOpen opens a zenoh session.
 // 'locator' is a pointer to a string representing the network endpoint to which establish the session. A typical locator looks like this : ``tcp/127.0.0.1:7447``.
 // If 'locator' is "nil", 'open' will scout and try to establish the session automatically.
 // 'properties' is a map of properties that will be used to establish and configure the zenoh session.
@@ -109,7 +123,7 @@ func (z *Zenoh) Close() error {
 	return nil
 }
 
-// Return a map of properties containing various informations about the
+// Info returns a map of properties containing various informations about the
 // established zenoh session 'z'.
 func (z *Zenoh) Info() map[int][]byte {
 	info := map[int][]byte{}
@@ -156,7 +170,7 @@ func callSubscriberDataHandler(rid *C.z_resource_id_t, data unsafe.Pointer, leng
 	goHandler(rname, dataSlice, info)
 }
 
-// Declare a subscribtion for all published data matching the provided resource selezctor 'resource'.
+// DeclareSubscriber declares a subscribtion for all published data matching the provided resource selezctor 'resource'.
 // 'resource' is the resource selection to subscribe to.
 // 'mode' is the subscription mode.
 // 'dataHandler' is the callback function that will be called each time a data matching the subscribed 'resource' selectoin is received.
@@ -191,7 +205,7 @@ func (z *Zenoh) DeclareSubscriber(resource string, mode SubMode, dataHandler Dat
 	return sub, nil
 }
 
-// Declare a publication for resource selection 'resource'.
+// DeclarePublisher declares a publication for resource selection 'resource'.
 // 'resource' is the resource selection to publish.
 // Return a zenoh publisher.
 func (z *Zenoh) DeclarePublisher(resource string) (*Publisher, error) {
@@ -266,7 +280,7 @@ func callStorageQueryHandler(rname *C.char, predicate *C.char, sendReplies unsaf
 	goHandler(goRname, goPredicate, goRepliesSender)
 }
 
-// Declare a storage for all data matching the provided resource selector 'resource'.
+// DeclareStorage declares a storage for all data matching the provided resource selector 'resource'.
 // 'resource' is the resource selection to store.
 // 'dataHandler' is the callback function that will be called each time a data matching the stored 'resource' selection is received.
 // 'queryHandler' is the callback function that will be called each time a query for data matching the stored 'resource' selection is received.
@@ -337,7 +351,7 @@ func callEvalQueryHandler(rname *C.char, predicate *C.char, sendReplies unsafe.P
 	goHandler(goRname, goPredicate, goRepliesSender)
 }
 
-// Declare an eval able to provide data matching the provided resource selector 'resource'.
+// DeclareEval declares an eval able to provide data matching the provided resource selector 'resource'.
 // 'resource' is the resource selection to evaluate.
 // 'handler' is the callback function that will be called each time a query for data matching the evaluated 'resource' selection is received.
 // The 'handler' function MUST call the provided 'sendReplies' function with the resulting data. 'sendReplies'can be called with an empty array.
@@ -373,7 +387,7 @@ func (z *Zenoh) DeclareEval(resource string, handler QueryHandler) (*Eval, error
 	return eval, nil
 }
 
-// Send data in a 'compact_data' message for the resource selector published by publisher 'p'.
+// StreamCompactData sends data in a 'compact_data' message for the resource selector published by publisher 'p'.
 // 'payload' is the data to be sent.
 func (p *Publisher) StreamCompactData(payload []byte) error {
 	b, l := bufferToC(payload)
@@ -384,7 +398,7 @@ func (p *Publisher) StreamCompactData(payload []byte) error {
 	return nil
 }
 
-// Send data in a 'stream_data' message for the resource selector published by publisher 'p'.
+// StreamData sends data in a 'stream_data' message for the resource selector published by publisher 'p'.
 // 'payload' is the data to be sent.
 func (p *Publisher) StreamData(payload []byte) error {
 	b, l := bufferToC(payload)
@@ -395,7 +409,7 @@ func (p *Publisher) StreamData(payload []byte) error {
 	return nil
 }
 
-// Send data in a 'write_data' message for the resource selector 'resource'.
+// WriteData sends data in a 'write_data' message for the resource selector 'resource'.
 // 'resource' is the resource name selector of the data to be sent.
 // 'payload' is the data to be sent.
 func (z *Zenoh) WriteData(resource string, payload []byte) error {
@@ -410,7 +424,7 @@ func (z *Zenoh) WriteData(resource string, payload []byte) error {
 	return nil
 }
 
-// Send data in a 'stream_data' message for the resource selector published by publisher 'p'.
+// StreamDataWO sends data in a 'stream_data' message for the resource selector published by publisher 'p'.
 // 'payload' is the data to be sent.
 // 'encoding' is a metadata information associated with the published data that represents the encoding of the published data.
 // 'kind' is a metadata information associated with the published data that represents the kind of publication.
@@ -423,7 +437,7 @@ func (p *Publisher) StreamDataWO(payload []byte, encoding uint8, kind uint8) err
 	return nil
 }
 
-// Send data in a 'write_data' message for the resource selector 'resource'.
+// WriteDataWO sends data in a 'write_data' message for the resource selector 'resource'.
 // 'resource' is the resource name selector of the data to be sent.
 // 'payload' is the data to be sent.
 // 'encoding' is a metadata information associated with the published data that represents the encoding of the published data.
@@ -459,7 +473,7 @@ func bufferToC(buf []byte) (*C.uchar, C.ulong) {
 	return (*C.uchar)(unsafe.Pointer(&buf[0])), C.ulong(len(buf))
 }
 
-// Return true if the resource name selector 'rname1' intersects with the resrouce name selector 'rname2'.
+// RNameIntersect returns true if the resource name selector 'rname1' intersects with the resrouce name selector 'rname2'.
 func RNameIntersect(rname1 string, rname2 string) bool {
 	r1 := C.CString(rname1)
 	defer C.free(unsafe.Pointer(r1))
@@ -484,7 +498,7 @@ func callReplyHandler(reply *C.z_reply_value_t, arg unsafe.Pointer) {
 	goHandler(reply)
 }
 
-// Query data matching resource selector 'resource'.
+// Query sends a query message for data matching the resource selector 'resource'.
 // 'resource' is the resource selection to query.
 // 'predicate' is a string that will be  propagated to the storages and evals that should provide the queried data.
 // It may allow them to filter, transform and/or compute the queried data.
@@ -512,14 +526,14 @@ func (z *Zenoh) Query(resource string, predicate string, replyHandler ReplyHandl
 	return nil
 }
 
-// Query data matching resource selector 'resource'.
+// QueryWO sends a query message data matching resource selector 'resource'.
 // 'resource' is the resource selection to query.
 // 'predicate' is a string that will be  propagated to the storages and evals that should provide the queried data.
 // It may allow them to filter, transform and/or compute the queried data.
 // 'replyHandler' is the callback function that will be called on reception of the replies of the query.
-// 'dest_storages' indicates which matching storages should be destination of the query.
-// 'dest_evals' indicates which matching evals should be destination of the query.
-func (z *Zenoh) QueryWO(resource string, predicate string, replyHandler ReplyHandler, dest_storages QueryDest, dest_evals QueryDest) error {
+// 'destStorages' indicates which matching storages should be destination of the query.
+// 'destEvals' indicates which matching evals should be destination of the query.
+func (z *Zenoh) QueryWO(resource string, predicate string, replyHandler ReplyHandler, destStorages QueryDest, destEvals QueryDest) error {
 	r := C.CString(resource)
 	defer C.free(unsafe.Pointer(r))
 	p := C.CString(predicate)
@@ -536,14 +550,14 @@ func (z *Zenoh) QueryWO(resource string, predicate string, replyHandler ReplyHan
 	result := C.z_query_wo(z, r, p,
 		(C.z_reply_handler_t)(unsafe.Pointer(C.handle_reply_cgo)),
 		unsafe.Pointer(uintptr(replyReg.index)),
-		dest_storages, dest_evals)
+		destStorages, destEvals)
 	if result != 0 {
 		return &ZError{"z_query on " + resource + "failed", int(result)}
 	}
 	return nil
 }
 
-// Undeclare the subscribtion 's'.
+// UndeclareSubscriber undeclares the subscribtion 's'.
 func (z *Zenoh) UndeclareSubscriber(s *Subscriber) error {
 	result := C.z_undeclare_subscriber(s.zsub)
 	if result != 0 {
@@ -556,7 +570,7 @@ func (z *Zenoh) UndeclareSubscriber(s *Subscriber) error {
 	return nil
 }
 
-// Undeclare the publication 'p'.
+// UndeclarePublisher undeclares the publication 'p'.
 func (z *Zenoh) UndeclarePublisher(p *Publisher) error {
 	result := C.z_undeclare_publisher(p)
 	if result != 0 {
@@ -565,7 +579,7 @@ func (z *Zenoh) UndeclarePublisher(p *Publisher) error {
 	return nil
 }
 
-// Undeclare the storage 's'.
+// UndeclareStorage undeclares the storage 's'.
 func (z *Zenoh) UndeclareStorage(s *Storage) error {
 	result := C.z_undeclare_storage(s.zsto)
 	if result != 0 {
@@ -579,7 +593,7 @@ func (z *Zenoh) UndeclareStorage(s *Storage) error {
 	return nil
 }
 
-// Undeclare the eval 'e'.
+// UndeclareEval undeclares the eval 'e'.
 func (z *Zenoh) UndeclareEval(e *Eval) error {
 	result := C.z_undeclare_eval(e.zeval)
 	if result != 0 {
@@ -839,8 +853,8 @@ func (r *ReplyValue) Kind() ReplyKind {
 	return ReplyKind(r.kind)
 }
 
-// SrcId returns the unique id of the storage or eval that sent this reply
-func (r *ReplyValue) SrcId() []byte {
+// SrcID returns the unique id of the storage or eval that sent this reply
+func (r *ReplyValue) SrcID() []byte {
 	return C.GoBytes(unsafe.Pointer(r.srcid), C.int(r.srcid_length))
 }
 
