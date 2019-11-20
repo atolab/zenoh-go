@@ -61,7 +61,7 @@ const ZUserKey = C.Z_USER_KEY
 // map passed to the Login() operation.
 const ZPasswdKey = C.Z_PASSWD_KEY
 
-// ZError reports an error that occured in the zenoh-c library
+// ZError reports an error that occurred in the zenoh-c library
 type ZError struct {
 	msg  string
 	code int
@@ -170,7 +170,7 @@ func callSubscriberDataHandler(rid *C.z_resource_id_t, data unsafe.Pointer, leng
 	goHandler(rname, dataSlice, info)
 }
 
-// DeclareSubscriber declares a subscribtion for all published data matching the provided resource selezctor 'resource'.
+// DeclareSubscriber declares a subscription for all published data matching the provided resource selector 'resource'.
 // 'resource' is the resource selection to subscribe to.
 // 'mode' is the subscription mode.
 // 'dataHandler' is the callback function that will be called each time a data matching the subscribed 'resource' selectoin is received.
@@ -454,7 +454,7 @@ func (z *Zenoh) WriteDataWO(resource string, payload []byte, encoding uint8, kin
 	return nil
 }
 
-// Pull data for the `ZPullMode` or `ZPeriodicPullMode` subscribtion 's'. The pulled data will be provided
+// Pull data for the `ZPullMode` or `ZPeriodicPullMode` subscription 's'. The pulled data will be provided
 // by calling the 'dataHandler' function provided to the `DeclareSubscriber` function.
 func (s *Subscriber) Pull() error {
 	result := C.z_pull(s.zsub)
@@ -557,7 +557,7 @@ func (z *Zenoh) QueryWO(resource string, predicate string, replyHandler ReplyHan
 	return nil
 }
 
-// UndeclareSubscriber undeclares the subscribtion 's'.
+// UndeclareSubscriber undeclares the subscription 's'.
 func (z *Zenoh) UndeclareSubscriber(s *Subscriber) error {
 	result := C.z_undeclare_subscriber(s.zsub)
 	if result != 0 {
