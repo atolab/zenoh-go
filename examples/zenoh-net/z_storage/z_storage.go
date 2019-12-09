@@ -5,23 +5,23 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/atolab/zenoh-go"
+	znet "github.com/atolab/zenoh-go/net"
 )
 
 var stored map[string][]byte
 
-func listener(rname string, data []byte, info *zenoh.DataInfo) {
+func listener(rname string, data []byte, info *znet.DataInfo) {
 	str := string(data)
 	fmt.Printf(">> [Storage listener] Received ('%20s' : '%s')\n", rname, str)
 	stored[rname] = data
 }
 
-func queryHandler(rname string, predicate string, repliesSender *zenoh.RepliesSender) {
+func queryHandler(rname string, predicate string, repliesSender *znet.RepliesSender) {
 	fmt.Printf(">> [Query handler   ] Handling '%s?%s'\n", rname, predicate)
-	replies := make([]zenoh.Resource, 0, len(stored))
+	replies := make([]znet.Resource, 0, len(stored))
 	for k, v := range stored {
-		if zenoh.RNameIntersect(rname, k) {
-			var res zenoh.Resource
+		if znet.RNameIntersect(rname, k) {
+			var res znet.Resource
 			res.RName = k
 			res.Data = v
 			res.Encoding = 0
@@ -46,24 +46,23 @@ func main() {
 		locator = &os.Args[2]
 	}
 
-	fmt.Println("Openning session...")
-	z, err := zenoh.ZOpen(locator, nil)
+	fmt.Println("Opening session...")
+	s, err := znet.ZOpen(locator, nil)
 	if err != nil {
 		panic(err.Error())
 	}
+	defer s.Close()
 
 	fmt.Println("Declaring Storage on '" + uri + "'...")
-	s, err := z.DeclareStorage(uri, listener, queryHandler)
+	sto, err := s.DeclareStorage(uri, listener, queryHandler)
 	if err != nil {
 		panic(err.Error())
 	}
+	defer s.UndeclareStorage(sto)
 
 	reader := bufio.NewReader(os.Stdin)
 	var c rune
 	for c != 'q' {
 		c, _, _ = reader.ReadRune()
 	}
-
-	z.UndeclareStorage(s)
-	z.Close()
 }

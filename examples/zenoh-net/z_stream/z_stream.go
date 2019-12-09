@@ -5,7 +5,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/atolab/zenoh-go"
+	znet "github.com/atolab/zenoh-go/net"
 )
 
 func main() {
@@ -24,25 +24,24 @@ func main() {
 		locator = &os.Args[3]
 	}
 
-	fmt.Println("Openning session...")
-	z, err := zenoh.ZOpen(locator, nil)
+	fmt.Println("Opening session...")
+	s, err := znet.ZOpen(locator, nil)
 	if err != nil {
 		panic(err.Error())
 	}
+	defer s.Close()
 
 	fmt.Println("Declaring Publisher on '" + uri + "'...")
-	pub, err := z.DeclarePublisher(uri)
+	pub, err := s.DeclarePublisher(uri)
 	if err != nil {
 		panic(err.Error())
 	}
+	defer s.UndeclarePublisher(pub)
 
 	for idx := 0; idx < 100; idx++ {
 		time.Sleep(1 * time.Second)
-		s := fmt.Sprintf("[%4d] %s", idx, value)
-		fmt.Printf("Streaming Data ('%s': '%s')...\n", uri, s)
-		pub.StreamData([]byte(s))
+		str := fmt.Sprintf("[%4d] %s", idx, value)
+		fmt.Printf("Streaming Data ('%s': '%s')...\n", uri, str)
+		pub.StreamData([]byte(str))
 	}
-
-	z.UndeclarePublisher(pub)
-	z.Close()
 }

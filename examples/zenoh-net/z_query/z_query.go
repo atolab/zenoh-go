@@ -5,27 +5,27 @@ import (
 	"os"
 	"time"
 
-	"github.com/atolab/zenoh-go"
+	znet "github.com/atolab/zenoh-go/net"
 )
 
-func replyHandler(reply *zenoh.ReplyValue) {
+func replyHandler(reply *znet.ReplyValue) {
 	switch reply.Kind() {
-	case zenoh.ZStorageData, zenoh.ZEvalData:
+	case znet.ZStorageData, znet.ZEvalData:
 		str := string(reply.Data())
 		switch reply.Kind() {
-		case zenoh.ZStorageData:
+		case znet.ZStorageData:
 			fmt.Printf(">> [Reply handler] received -Storage Data- ('%s': '%s')\n", reply.RName(), str)
-		case zenoh.ZEvalData:
+		case znet.ZEvalData:
 			fmt.Printf(">> [Reply handler] received -Eval Data-    ('%s': '%s')\n", reply.RName(), str)
 		}
 
-	case zenoh.ZStorageFinal:
+	case znet.ZStorageFinal:
 		fmt.Println(">> [Reply handler] received -Storage Final-")
 
-	case zenoh.ZEvalFinal:
+	case znet.ZEvalFinal:
 		fmt.Println(">> [Reply handler] received -Eval Final-")
 
-	case zenoh.ZReplyFinal:
+	case znet.ZReplyFinal:
 		fmt.Println(">> [Reply handler] received -Reply Final-")
 	}
 }
@@ -41,19 +41,18 @@ func main() {
 		locator = &os.Args[2]
 	}
 
-	fmt.Println("Openning session...")
-	z, err := zenoh.ZOpen(locator, nil)
+	fmt.Println("Opening session...")
+	s, err := znet.ZOpen(locator, nil)
 	if err != nil {
 		panic(err.Error())
 	}
+	defer s.Close()
 
 	fmt.Println("Sending Query '" + uri + "'...")
-	err = z.QueryWO(uri, "", replyHandler, zenoh.NewQueryDest(zenoh.ZAll), zenoh.NewQueryDest(zenoh.ZAll))
+	err = s.QueryWO(uri, "", replyHandler, znet.NewQueryDest(znet.ZAll), znet.NewQueryDest(znet.ZAll))
 	if err != nil {
 		panic(err.Error())
 	}
 
 	time.Sleep(1 * time.Second)
-
-	z.Close()
 }

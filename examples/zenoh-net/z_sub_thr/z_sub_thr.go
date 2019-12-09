@@ -5,7 +5,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/atolab/zenoh-go"
+	znet "github.com/atolab/zenoh-go/net"
 )
 
 const n = 100000
@@ -20,7 +20,7 @@ func printStats(start time.Time, stop time.Time) {
 	fmt.Printf("%f msgs/sec\n", thpt)
 }
 
-func listener(rid string, data []byte, info *zenoh.DataInfo) {
+func listener(rid string, data []byte, info *znet.DataInfo) {
 	if count == 0 {
 		start = time.Now()
 		count++
@@ -39,15 +39,17 @@ func main() {
 		locator = &os.Args[1]
 	}
 
-	z, err := zenoh.ZOpen(locator, nil)
+	s, err := znet.ZOpen(locator, nil)
 	if err != nil {
 		panic(err.Error())
 	}
+	defer s.Close()
 
-	_, err = z.DeclareSubscriber("/test/thr", zenoh.NewSubMode(zenoh.ZPushMode), listener)
+	sub, err := s.DeclareSubscriber("/test/thr", znet.NewSubMode(znet.ZPushMode), listener)
 	if err != nil {
 		panic(err.Error())
 	}
+	defer s.UndeclareSubscriber(sub)
 
 	time.Sleep(60 * time.Second)
 

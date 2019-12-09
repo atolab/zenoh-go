@@ -5,7 +5,7 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/atolab/zenoh-go"
+	znet "github.com/atolab/zenoh-go/net"
 )
 
 func main() {
@@ -29,15 +29,17 @@ func main() {
 		data[i] = byte(i % 10)
 	}
 
-	z, err := zenoh.ZOpen(locator, nil)
+	s, err := znet.ZOpen(locator, nil)
 	if err != nil {
 		panic(err.Error())
 	}
+	defer s.Close()
 
-	pub, err := z.DeclarePublisher("/test/thr")
+	pub, err := s.DeclarePublisher("/test/thr")
 	if err != nil {
 		panic(err.Error())
 	}
+	defer s.UndeclarePublisher(pub)
 
 	for true {
 		pub.StreamData(data)

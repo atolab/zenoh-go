@@ -1,4 +1,4 @@
-package zenoh
+package net
 
 /*
 #include <zenoh.h>

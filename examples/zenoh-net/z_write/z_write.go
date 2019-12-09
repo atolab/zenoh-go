@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/atolab/zenoh-go"
+	znet "github.com/atolab/zenoh-go/net"
 )
 
 func main() {
@@ -23,14 +23,13 @@ func main() {
 		locator = &os.Args[3]
 	}
 
-	fmt.Println("Openning session...")
-	z, err := zenoh.ZOpen(locator, nil)
+	fmt.Println("Opening session...")
+	s, err := znet.ZOpen(locator, nil)
 	if err != nil {
 		panic(err.Error())
 	}
+	defer s.Close()
 
 	fmt.Printf("Writing Data ('%s': '%s')...\n", uri, value)
-	z.WriteData(uri, []byte(value))
-
-	z.Close()
+	s.WriteData(uri, []byte(value))
 }
