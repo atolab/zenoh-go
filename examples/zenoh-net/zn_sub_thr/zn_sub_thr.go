@@ -20,7 +20,7 @@ func printStats(start time.Time, stop time.Time) {
 	fmt.Printf("%f msgs/sec\n", thpt)
 }
 
-func listener(rid string, data []byte, info *znet.DataInfo) {
+func listener(rname string, data []byte, info *znet.DataInfo) {
 	if count == 0 {
 		start = time.Now()
 		count++
@@ -39,13 +39,13 @@ func main() {
 		locator = &os.Args[1]
 	}
 
-	s, err := znet.ZOpen(locator, nil)
+	s, err := znet.Open(locator, nil)
 	if err != nil {
 		panic(err.Error())
 	}
 	defer s.Close()
 
-	sub, err := s.DeclareSubscriber("/test/thr", znet.NewSubMode(znet.ZPushMode), listener)
+	sub, err := s.DeclareSubscriber("/test/thr", znet.NewSubMode(znet.ZNPushMode), listener)
 	if err != nil {
 		panic(err.Error())
 	}

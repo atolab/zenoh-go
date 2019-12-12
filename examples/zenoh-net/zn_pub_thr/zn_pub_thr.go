@@ -11,7 +11,7 @@ import (
 func main() {
 	var locator *string
 	if len(os.Args) < 2 {
-		fmt.Printf("USAGE:\n\tz_pub_thr <payload-size> [<zenoh-locator>]\n\n")
+		fmt.Printf("USAGE:\n\tzn_pub_thr <payload-size> [<zenoh-locator>]\n\n")
 		os.Exit(-1)
 	}
 
@@ -29,7 +29,7 @@ func main() {
 		data[i] = byte(i % 10)
 	}
 
-	s, err := znet.ZOpen(locator, nil)
+	s, err := znet.Open(locator, nil)
 	if err != nil {
 		panic(err.Error())
 	}

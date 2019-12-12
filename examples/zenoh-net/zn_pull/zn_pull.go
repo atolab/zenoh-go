@@ -8,9 +8,9 @@ import (
 	znet "github.com/atolab/zenoh-go/net"
 )
 
-func listener(rid string, data []byte, info *znet.DataInfo) {
+func listener(rname string, data []byte, info *znet.DataInfo) {
 	str := string(data)
-	fmt.Printf(">> [Subscription listener] Received ('%s': '%s')\n", rid, str)
+	fmt.Printf(">> [Subscription listener] Received ('%s': '%s')\n", rname, str)
 }
 
 func main() {
@@ -25,14 +25,14 @@ func main() {
 	}
 
 	fmt.Println("Opening session...")
-	s, err := znet.ZOpen(locator, nil)
+	s, err := znet.Open(locator, nil)
 	if err != nil {
 		panic(err.Error())
 	}
 	defer s.Close()
 
 	fmt.Println("Declaring Subscriber on '" + uri + "'...")
-	sub, err := s.DeclareSubscriber(uri, znet.NewSubMode(znet.ZPullMode), listener)
+	sub, err := s.DeclareSubscriber(uri, znet.NewSubMode(znet.ZNPullMode), listener)
 	if err != nil {
 		panic(err.Error())
 	}

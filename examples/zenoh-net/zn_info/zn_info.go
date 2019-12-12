@@ -18,7 +18,7 @@ func main() {
 	properties := map[int][]byte{
 		znet.UserKey:   []byte("user"),
 		znet.PasswdKey: []byte("password")}
-	s, err := znet.ZOpen(locator, properties)
+	s, err := znet.Open(locator, properties)
 	if err != nil {
 		panic(err.Error())
 	}

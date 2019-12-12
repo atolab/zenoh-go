@@ -25,7 +25,7 @@ func main() {
 	}
 
 	fmt.Println("Opening session...")
-	s, err := znet.ZOpen(locator, nil)
+	s, err := znet.Open(locator, nil)
 	if err != nil {
 		panic(err.Error())
 	}

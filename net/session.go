@@ -9,16 +9,16 @@ package net
 
 #include <stdlib.h>
 #include <stdio.h>
-#include <zenoh.h>
-#include <zenoh/recv_loop.h>
+#include <zenoh/net/session.h>
+#include <zenoh/net/recv_loop.h>
 #include <zenoh/rname.h>
 
 // Forward declarations of callbacks (see c_callbacks.go)
-extern void subscriber_handle_data_cgo(const z_resource_id_t *rid, const unsigned char *data, size_t length, const z_data_info_t *info, void *arg);
-extern void storage_handle_data_cgo(const z_resource_id_t *rid, const unsigned char *data, size_t length, const z_data_info_t *info, void *arg);
-extern void storage_handle_query_cgo(const char *rname, const char *predicate, z_replies_sender_t send_replies, void *query_handle, void *arg);
-extern void eval_handle_query_cgo(const char *rname, const char *predicate, z_replies_sender_t send_replies, void *query_handle, void *arg);
-extern void handle_reply_cgo(const z_reply_value_t *reply, void *arg);
+extern void subscriber_handle_data_cgo(const zn_resource_key_t *rkey, const unsigned char *data, size_t length, const zn_data_info_t *info, void *arg);
+extern void storage_handle_data_cgo(const zn_resource_key_t *rkey, const unsigned char *data, size_t length, const zn_data_info_t *info, void *arg);
+extern void storage_handle_query_cgo(const char *rname, const char *predicate, zn_replies_sender_t send_replies, void *query_handle, void *arg);
+extern void eval_handle_query_cgo(const char *rname, const char *predicate, zn_replies_sender_t send_replies, void *query_handle, void *arg);
+extern void handle_reply_cgo(const zn_reply_value_t *reply, void *arg);
 */
 import "C"
 import (
@@ -33,23 +33,22 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-
 var logger = log.WithFields(log.Fields{" pkg": "zenoh/net"})
 
-// ZOpen opens a zenoh session.
+// Open opens a zenoh session.
 // 'locator' is a pointer to a string representing the network endpoint to which establish the session. A typical locator looks like this : ``tcp/127.0.0.1:7447``.
 // If 'locator' is "nil", 'open' will scout and try to establish the session automatically.
 // 'properties' is a map of properties that will be used to establish and configure the zenoh session.
 // 'properties' will typically contain the username and password informations needed to establish the zenoh session with a secured infrastructure.
 // It can be set to "nil".
 // Return a handle to the zenoh session.
-func ZOpen(locator *string, properties map[int][]byte) (*Session, error) {
-	logger.WithField("locator", locator).Debug("ZOpen")
+func Open(locator *string, properties map[int][]byte) (*Session, error) {
+	logger.WithField("locator", locator).Debug("Open")
 
 	pvec := ((C.z_vec_t)(C.z_vec_make(C.uint(len(properties)))))
 	for k, v := range properties {
-		value := C.z_array_uint8_t{length: C.uint(len(v)), elem: (*C.uchar)(unsafe.Pointer(&v[0]))}
-		prop := ((*C.z_property_t)(C.z_property_make(C.ulong(k), value)))
+		value := C.z_uint8_array_t{length: C.uint(len(v)), elem: (*C.uchar)(unsafe.Pointer(&v[0]))}
+		prop := ((*C.zn_property_t)(C.zn_property_make(C.ulong(k), value)))
 		C.z_vec_append(&pvec, unsafe.Pointer(prop))
 	}
 
@@ -59,14 +58,14 @@ func ZOpen(locator *string, properties map[int][]byte) (*Session, error) {
 		defer C.free(unsafe.Pointer(l))
 	}
 
-	result := C.z_open(l, nil, &pvec)
+	result := C.zn_open(l, nil, &pvec)
 	if result.tag == C.Z_ERROR_TAG {
-		return nil, &ZNError{"z_open failed", resultValueToErrorCode(result.value)}
+		return nil, &ZNError{"zn_open failed", resultValueToErrorCode(result.value)}
 	}
 	s := resultValueToSession(result.value)
 
-	logger.WithField("locator", locator).Debug("Run z_recv_loop")
-	go C.z_recv_loop(s)
+	logger.WithField("locator", locator).Debug("Run zn_recv_loop")
+	go C.zn_recv_loop(s)
 
 	return s, nil
 }
@@ -74,13 +73,13 @@ func ZOpen(locator *string, properties map[int][]byte) (*Session, error) {
 // Close the zenoh session 'z'.
 func (s *Session) Close() error {
 	logger.Debug("Close")
-	errcode := C.z_stop_recv_loop(s)
+	errcode := C.zn_stop_recv_loop(s)
 	if errcode != 0 {
-		return &ZNError{"z_stop_recv_loop failed", int(errcode)}
+		return &ZNError{"zn_stop_recv_loop failed", int(errcode)}
 	}
-	errcode = C.z_close(s)
+	errcode = C.zn_close(s)
 	if errcode != 0 {
-		return &ZNError{"z_close failed", int(errcode)}
+		return &ZNError{"zn_close failed", int(errcode)}
 	}
 	return nil
 }
@@ -89,10 +88,10 @@ func (s *Session) Close() error {
 // established zenoh session 'z'.
 func (s *Session) Info() map[int][]byte {
 	info := map[int][]byte{}
-	cprops := C.z_info(s)
+	cprops := C.zn_info(s)
 	propslength := int(C.z_vec_length(&cprops))
 	for i := 0; i < propslength; i++ {
-		cvalue := ((*C.z_property_t)(C.z_vec_get(&cprops, C.uint(i)))).value
+		cvalue := ((*C.zn_property_t)(C.z_vec_get(&cprops, C.uint(i)))).value
 		info[i] = C.GoBytes(unsafe.Pointer(cvalue.elem), C.int(cvalue.length))
 	}
 	return info
@@ -107,12 +106,12 @@ type subscriberHandlersRegistry struct {
 var subReg = subscriberHandlersRegistry{new(sync.Mutex), 0, make(map[int]DataHandler)}
 
 //export callSubscriberDataHandler
-func callSubscriberDataHandler(rid *C.z_resource_id_t, data unsafe.Pointer, length C.size_t, info *C.z_data_info_t, arg unsafe.Pointer) {
+func callSubscriberDataHandler(rkey *C.zn_resource_key_t, data unsafe.Pointer, length C.size_t, info *C.zn_data_info_t, arg unsafe.Pointer) {
 	var rname string
-	if rid.kind == C.Z_STR_RES_ID {
-		rname = resIDToRName(rid.id)
+	if rkey.kind == C.ZN_STR_RES_KEY {
+		rname = resKeyToRName(rkey.key)
 	} else {
-		fmt.Printf("INTERNAL ERROR: DataHandler received a non-string z_resource_id_t with kind=%d\n", rid.kind)
+		fmt.Printf("INTERNAL ERROR: DataHandler received a non-string zn_resource_key_t with kind=%d\n", rkey.kind)
 		return
 	}
 
@@ -152,12 +151,12 @@ func (s *Session) DeclareSubscriber(resource string, mode SubMode, dataHandler D
 	subReg.dHandler[subReg.index] = dataHandler
 
 	// Note: 'arg' parameter is used to store the index of handler in subReg.dHandler. Don't use it as a real C memory address !!
-	result := C.z_declare_subscriber(s, r, &mode,
-		(C.z_data_handler_t)(unsafe.Pointer(C.subscriber_handle_data_cgo)),
+	result := C.zn_declare_subscriber(s, r, &mode,
+		(C.zn_data_handler_t)(unsafe.Pointer(C.subscriber_handle_data_cgo)),
 		unsafe.Pointer(uintptr(subReg.index)))
 	if result.tag == C.Z_ERROR_TAG {
 		delete(subReg.dHandler, subReg.index)
-		return nil, &ZNError{"z_declare_subscriber for " + resource + " failed", resultValueToErrorCode(result.value)}
+		return nil, &ZNError{"zn_declare_subscriber for " + resource + " failed", resultValueToErrorCode(result.value)}
 	}
 
 	sub := new(Subscriber)
@@ -176,9 +175,9 @@ func (s *Session) DeclarePublisher(resource string) (*Publisher, error) {
 	r := C.CString(resource)
 	defer C.free(unsafe.Pointer(r))
 
-	result := C.z_declare_publisher(s, r)
+	result := C.zn_declare_publisher(s, r)
 	if result.tag == C.Z_ERROR_TAG {
-		return nil, &ZNError{"z_declare_publisher for " + resource + " failed", resultValueToErrorCode(result.value)}
+		return nil, &ZNError{"zn_declare_publisher for " + resource + " failed", resultValueToErrorCode(result.value)}
 	}
 
 	return resultValueToPublisher(result.value), nil
@@ -194,12 +193,12 @@ type storageHandlersRegistry struct {
 var stoHdlReg = storageHandlersRegistry{new(sync.Mutex), 0, make(map[int]DataHandler), make(map[int]QueryHandler)}
 
 //export callStorageDataHandler
-func callStorageDataHandler(rid *C.z_resource_id_t, data unsafe.Pointer, length C.size_t, info *C.z_data_info_t, arg unsafe.Pointer) {
+func callStorageDataHandler(rkey *C.zn_resource_key_t, data unsafe.Pointer, length C.size_t, info *C.zn_data_info_t, arg unsafe.Pointer) {
 	var rname string
-	if rid.kind == C.Z_STR_RES_ID {
-		rname = resIDToRName(rid.id)
+	if rkey.kind == C.ZN_STR_RES_KEY {
+		rname = resKeyToRName(rkey.key)
 	} else {
-		fmt.Printf("INTERNAL ERROR: DataHandler received a non-string z_resource_id_t with kind=%d\n", rid.kind)
+		fmt.Printf("INTERNAL ERROR: DataHandler received a non-string zn_resource_key_t with kind=%d\n", rkey.kind)
 		return
 	}
 
@@ -224,7 +223,7 @@ func callStorageQueryHandler(rname *C.char, predicate *C.char, sendReplies unsaf
 	goRname := C.GoString(rname)
 	goPredicate := C.GoString(predicate)
 	goRepliesSender := new(RepliesSender)
-	goRepliesSender.sendRepliesFunc = C.z_replies_sender_t(sendReplies)
+	goRepliesSender.sendRepliesFunc = C.zn_replies_sender_t(sendReplies)
 	goRepliesSender.queryHandle = queryHandle
 
 	// Note: 'arg' parameter is used to store the index of handler in stoHdlReg.qHandler. Don't use it as a real C memory address !!
@@ -265,14 +264,14 @@ func (s *Session) DeclareStorage(resource string, dataHandler DataHandler, query
 	stoHdlReg.qHandler[stoHdlReg.index] = queryHandler
 
 	// Note: 'arg' parameter is used to store the index of handler in stoHdlReg. Don't use it as a real C memory address !!
-	result := C.z_declare_storage(s, r,
-		(C.z_data_handler_t)(unsafe.Pointer(C.storage_handle_data_cgo)),
-		(C.z_query_handler_t)(unsafe.Pointer(C.storage_handle_query_cgo)),
+	result := C.zn_declare_storage(s, r,
+		(C.zn_data_handler_t)(unsafe.Pointer(C.storage_handle_data_cgo)),
+		(C.zn_query_handler_t)(unsafe.Pointer(C.storage_handle_query_cgo)),
 		unsafe.Pointer(uintptr(stoHdlReg.index)))
 	if result.tag == C.Z_ERROR_TAG {
 		delete(stoHdlReg.dHandler, stoHdlReg.index)
 		delete(stoHdlReg.qHandler, stoHdlReg.index)
-		return nil, &ZNError{"z_declare_storage for " + resource + " failed", resultValueToErrorCode(result.value)}
+		return nil, &ZNError{"zn_declare_storage for " + resource + " failed", resultValueToErrorCode(result.value)}
 	}
 
 	storage := new(Storage)
@@ -295,7 +294,7 @@ func callEvalQueryHandler(rname *C.char, predicate *C.char, sendReplies unsafe.P
 	goRname := C.GoString(rname)
 	goPredicate := C.GoString(predicate)
 	goRepliesSender := new(RepliesSender)
-	goRepliesSender.sendRepliesFunc = C.z_replies_sender_t(sendReplies)
+	goRepliesSender.sendRepliesFunc = C.zn_replies_sender_t(sendReplies)
 	goRepliesSender.queryHandle = queryHandle
 
 	// Note: 'arg' parameter is used to store the index of handler in evalHdlReg.qHandler. Don't use it as a real C memory address !!
@@ -334,12 +333,12 @@ func (s *Session) DeclareEval(resource string, handler QueryHandler) (*Eval, err
 	evalHdlReg.qHandler[evalHdlReg.index] = handler
 
 	// Note: 'arg' parameter is used to store the index of handler in evalHdlReg. Don't use it as a real C memory address !!
-	result := C.z_declare_eval(s, r,
-		(C.z_query_handler_t)(unsafe.Pointer(C.eval_handle_query_cgo)),
+	result := C.zn_declare_eval(s, r,
+		(C.zn_query_handler_t)(unsafe.Pointer(C.eval_handle_query_cgo)),
 		unsafe.Pointer(uintptr(evalHdlReg.index)))
 	if result.tag == C.Z_ERROR_TAG {
 		delete(evalHdlReg.qHandler, evalHdlReg.index)
-		return nil, &ZNError{"z_declare_eval for " + resource + " failed", resultValueToErrorCode(result.value)}
+		return nil, &ZNError{"zn_declare_eval for " + resource + " failed", resultValueToErrorCode(result.value)}
 	}
 
 	eval := new(Eval)
@@ -353,9 +352,9 @@ func (s *Session) DeclareEval(resource string, handler QueryHandler) (*Eval, err
 // 'payload' is the data to be sent.
 func (p *Publisher) StreamCompactData(payload []byte) error {
 	b, l := bufferToC(payload)
-	result := C.z_stream_compact_data(p, b, l)
+	result := C.zn_stream_compact_data(p, b, l)
 	if result != 0 {
-		return &ZNError{"z_stream_compact_data of " + strconv.Itoa(len(payload)) + " bytes buffer failed", int(result)}
+		return &ZNError{"zn_stream_compact_data of " + strconv.Itoa(len(payload)) + " bytes buffer failed", int(result)}
 	}
 	return nil
 }
@@ -364,9 +363,9 @@ func (p *Publisher) StreamCompactData(payload []byte) error {
 // 'payload' is the data to be sent.
 func (p *Publisher) StreamData(payload []byte) error {
 	b, l := bufferToC(payload)
-	result := C.z_stream_data(p, b, l)
+	result := C.zn_stream_data(p, b, l)
 	if result != 0 {
-		return &ZNError{"z_stream_data of " + strconv.Itoa(len(payload)) + " bytes buffer failed", int(result)}
+		return &ZNError{"zn_stream_data of " + strconv.Itoa(len(payload)) + " bytes buffer failed", int(result)}
 	}
 	return nil
 }
@@ -379,9 +378,9 @@ func (s *Session) WriteData(resource string, payload []byte) error {
 	defer C.free(unsafe.Pointer(r))
 
 	b, l := bufferToC(payload)
-	result := C.z_write_data(s, r, b, l)
+	result := C.zn_write_data(s, r, b, l)
 	if result != 0 {
-		return &ZNError{"z_write_data of " + strconv.Itoa(len(payload)) + " bytes buffer on " + resource + "failed", int(result)}
+		return &ZNError{"zn_write_data of " + strconv.Itoa(len(payload)) + " bytes buffer on " + resource + "failed", int(result)}
 	}
 	return nil
 }
@@ -392,9 +391,9 @@ func (s *Session) WriteData(resource string, payload []byte) error {
 // 'kind' is a metadata information associated with the published data that represents the kind of publication.
 func (p *Publisher) StreamDataWO(payload []byte, encoding uint8, kind uint8) error {
 	b, l := bufferToC(payload)
-	result := C.z_stream_data_wo(p, b, l, C.uchar(encoding), C.uchar(kind))
+	result := C.zn_stream_data_wo(p, b, l, C.uchar(encoding), C.uchar(kind))
 	if result != 0 {
-		return &ZNError{"z_stream_data_wo of " + strconv.Itoa(len(payload)) + " bytes buffer failed", int(result)}
+		return &ZNError{"zn_stream_data_wo of " + strconv.Itoa(len(payload)) + " bytes buffer failed", int(result)}
 	}
 	return nil
 }
@@ -409,9 +408,9 @@ func (s *Session) WriteDataWO(resource string, payload []byte, encoding uint8, k
 	defer C.free(unsafe.Pointer(r))
 
 	b, l := bufferToC(payload)
-	result := C.z_write_data_wo(s, r, b, l, C.uchar(encoding), C.uchar(kind))
+	result := C.zn_write_data_wo(s, r, b, l, C.uchar(encoding), C.uchar(kind))
 	if result != 0 {
-		return &ZNError{"z_write_data_wo of " + strconv.Itoa(len(payload)) + " bytes buffer on " + resource + "failed", int(result)}
+		return &ZNError{"zn_write_data_wo of " + strconv.Itoa(len(payload)) + " bytes buffer on " + resource + "failed", int(result)}
 	}
 	return nil
 }
@@ -419,9 +418,9 @@ func (s *Session) WriteDataWO(resource string, payload []byte, encoding uint8, k
 // Pull data for the `ZPullMode` or `ZPeriodicPullMode` subscription 's'. The pulled data will be provided
 // by calling the 'dataHandler' function provided to the `DeclareSubscriber` function.
 func (s *Subscriber) Pull() error {
-	result := C.z_pull(s.zsub)
+	result := C.zn_pull(s.zsub)
 	if result != 0 {
-		return &ZNError{"z_pull failed", int(result)}
+		return &ZNError{"zn_pull failed", int(result)}
 	}
 	return nil
 }
@@ -442,7 +441,7 @@ func RNameIntersect(rname1 string, rname2 string) bool {
 	r2 := C.CString(rname2)
 	defer C.free(unsafe.Pointer(r2))
 
-	return C.intersect(r1, r2) != 0
+	return C.zn_rname_intersect(r1, r2) != 0
 }
 
 type replyHandlersRegistry struct {
@@ -454,7 +453,7 @@ type replyHandlersRegistry struct {
 var replyReg = replyHandlersRegistry{new(sync.Mutex), 0, make(map[int]ReplyHandler)}
 
 //export callReplyHandler
-func callReplyHandler(reply *C.z_reply_value_t, arg unsafe.Pointer) {
+func callReplyHandler(reply *C.zn_reply_value_t, arg unsafe.Pointer) {
 	index := uintptr(arg)
 	goHandler := replyReg.rHandler[int(index)]
 	goHandler(reply)
@@ -479,11 +478,11 @@ func (s *Session) Query(resource string, predicate string, replyHandler ReplyHan
 	}
 	replyReg.rHandler[replyReg.index] = replyHandler
 
-	result := C.z_query(s, r, p,
-		(C.z_reply_handler_t)(unsafe.Pointer(C.handle_reply_cgo)),
+	result := C.zn_query(s, r, p,
+		(C.zn_reply_handler_t)(unsafe.Pointer(C.handle_reply_cgo)),
 		unsafe.Pointer(uintptr(replyReg.index)))
 	if result != 0 {
-		return &ZNError{"z_query on " + resource + "failed", int(result)}
+		return &ZNError{"zn_query on " + resource + "failed", int(result)}
 	}
 	return nil
 }
@@ -509,21 +508,21 @@ func (s *Session) QueryWO(resource string, predicate string, replyHandler ReplyH
 	}
 	replyReg.rHandler[replyReg.index] = replyHandler
 
-	result := C.z_query_wo(s, r, p,
-		(C.z_reply_handler_t)(unsafe.Pointer(C.handle_reply_cgo)),
+	result := C.zn_query_wo(s, r, p,
+		(C.zn_reply_handler_t)(unsafe.Pointer(C.handle_reply_cgo)),
 		unsafe.Pointer(uintptr(replyReg.index)),
 		destStorages, destEvals)
 	if result != 0 {
-		return &ZNError{"z_query on " + resource + "failed", int(result)}
+		return &ZNError{"zn_query on " + resource + "failed", int(result)}
 	}
 	return nil
 }
 
 // UndeclareSubscriber undeclares the subscription 's'.
 func (s *Session) UndeclareSubscriber(sub *Subscriber) error {
-	result := C.z_undeclare_subscriber(sub.zsub)
+	result := C.zn_undeclare_subscriber(sub.zsub)
 	if result != 0 {
-		return &ZNError{"z_undeclare_subscriber failed", int(result)}
+		return &ZNError{"zn_undeclare_subscriber failed", int(result)}
 	}
 	subReg.mu.Lock()
 	delete(subReg.dHandler, sub.regIndex)
@@ -534,18 +533,18 @@ func (s *Session) UndeclareSubscriber(sub *Subscriber) error {
 
 // UndeclarePublisher undeclares the publication 'p'.
 func (s *Session) UndeclarePublisher(p *Publisher) error {
-	result := C.z_undeclare_publisher(p)
+	result := C.zn_undeclare_publisher(p)
 	if result != 0 {
-		return &ZNError{"z_undeclare_publisher failed", int(result)}
+		return &ZNError{"zn_undeclare_publisher failed", int(result)}
 	}
 	return nil
 }
 
 // UndeclareStorage undeclares the storage 's'.
 func (s *Session) UndeclareStorage(sto *Storage) error {
-	result := C.z_undeclare_storage(sto.zsto)
+	result := C.zn_undeclare_storage(sto.zsto)
 	if result != 0 {
-		return &ZNError{"z_undeclare_storage failed", int(result)}
+		return &ZNError{"zn_undeclare_storage failed", int(result)}
 	}
 	stoHdlReg.mu.Lock()
 	delete(stoHdlReg.dHandler, sto.regIndex)
@@ -557,9 +556,9 @@ func (s *Session) UndeclareStorage(sto *Storage) error {
 
 // UndeclareEval undeclares the eval 'e'.
 func (s *Session) UndeclareEval(e *Eval) error {
-	result := C.z_undeclare_eval(e.zeval)
+	result := C.zn_undeclare_eval(e.zeval)
 	if result != 0 {
-		return &ZNError{"z_undeclare_eval failed", int(result)}
+		return &ZNError{"zn_undeclare_eval failed", int(result)}
 	}
 	evalHdlReg.mu.Lock()
 	delete(evalHdlReg.qHandler, e.regIndex)
@@ -587,7 +586,7 @@ func resultValueToSession(cbytes [8]byte) *Session {
 	return nil
 }
 
-// resultValueToPublisher gets the Publisher (z_pub_t) from a z_pub_p_result_t.value (union type)
+// resultValueToPublisher gets the Publisher (zn_pub_t) from a zn_pub_p_result_t.value (union type)
 func resultValueToPublisher(cbytes [8]byte) *Publisher {
 	buf := bytes.NewBuffer(cbytes[:])
 	var ptr uint64
@@ -598,47 +597,47 @@ func resultValueToPublisher(cbytes [8]byte) *Publisher {
 	return nil
 }
 
-// resultValueToSubscriber gets the Subscriber (z_sub_t) from a z_sub_p_result_t.value (union type)
-func resultValueToSubscriber(cbytes [8]byte) *C.z_sub_t {
+// resultValueToSubscriber gets the Subscriber (zn_sub_t) from a zn_sub_p_result_t.value (union type)
+func resultValueToSubscriber(cbytes [8]byte) *C.zn_sub_t {
 	buf := bytes.NewBuffer(cbytes[:])
 	var ptr uint64
 	if err := binary.Read(buf, binary.LittleEndian, &ptr); err == nil {
 		uptr := uintptr(ptr)
-		return (*C.z_sub_t)(unsafe.Pointer(uptr))
+		return (*C.zn_sub_t)(unsafe.Pointer(uptr))
 	}
 	return nil
 }
 
-// resultValueToStorage gets the Storage (z_sto_t) from a z_sto_p_result_t.value (union type)
-func resultValueToStorage(cbytes [8]byte) *C.z_sto_t {
+// resultValueToStorage gets the Storage (zn_sto_t) from a zn_sto_p_result_t.value (union type)
+func resultValueToStorage(cbytes [8]byte) *C.zn_sto_t {
 	buf := bytes.NewBuffer(cbytes[:])
 	var ptr uint64
 	if err := binary.Read(buf, binary.LittleEndian, &ptr); err == nil {
 		uptr := uintptr(ptr)
-		return (*C.z_sto_t)(unsafe.Pointer(uptr))
+		return (*C.zn_sto_t)(unsafe.Pointer(uptr))
 	}
 	return nil
 }
 
-// resultValueToEval gets the Eval (z_eva_t) from a z_eval_p_result_t.value (union type)
-func resultValueToEval(cbytes [8]byte) *C.z_eva_t {
+// resultValueToEval gets the Eval (zn_eva_t) from a zn_eval_p_result_t.value (union type)
+func resultValueToEval(cbytes [8]byte) *C.zn_eva_t {
 	buf := bytes.NewBuffer(cbytes[:])
 	var ptr uint64
 	if err := binary.Read(buf, binary.LittleEndian, &ptr); err == nil {
 		uptr := uintptr(ptr)
-		return (*C.z_eva_t)(unsafe.Pointer(uptr))
+		return (*C.zn_eva_t)(unsafe.Pointer(uptr))
 	}
 	return nil
 }
 
-// resIDToRName gets the rname (string) from a z_res_id_t (union type)
-func resIDToRName(cbytes [8]byte) string {
+// resKeyToRName gets the rname (string) from a zn_res_key_t (union type)
+func resKeyToRName(cbytes [8]byte) string {
 	buf := bytes.NewBuffer(cbytes[:])
 	var ptr uint64
 	if err := binary.Read(buf, binary.LittleEndian, &ptr); err == nil {
 		uptr := uintptr(ptr)
 		return C.GoString((*C.char)(unsafe.Pointer(uptr)))
 	}
-	panic("resIDToRName: failed to read 64bits pointer from z_res_id_t union (represented as a [8]byte)")
+	panic("resKeyToRName: failed to read 64bits pointer from zn_res_key_t union (represented as a [8]byte)")
 
 }

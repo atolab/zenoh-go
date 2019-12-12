@@ -16,11 +16,10 @@ const PropPassword = "password"
 
 // Zenoh is Zenoh
 type Zenoh struct {
-	session   *znet.Session
+	session *znet.Session
 	zenohid string
 	admin   *Admin
 }
-
 
 var logger = log.WithFields(log.Fields{" pkg": "zenoh"})
 
@@ -56,7 +55,7 @@ func getZProps(properties Properties) map[int][]byte {
 // Properties contains the configuration to be used for this session (e.g. "user", "password"...). It can be nil.
 func Login(locator *string, properties Properties) (*Zenoh, error) {
 	logger.WithField("locator", locator).Debug("Establishing session to Zenoh router")
-	z, e := znet.ZOpen(locator, getZProps(properties))
+	z, e := znet.Open(locator, getZProps(properties))
 	if e != nil {
 		return nil, &ZError{"Login failed", e}
 	}

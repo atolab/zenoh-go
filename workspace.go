@@ -110,7 +110,7 @@ func (w *Workspace) Get(selector *Selector) []Entry {
 
 	replyCb := func(reply *znet.ReplyValue) {
 		switch reply.Kind() {
-		case znet.ZStorageData, znet.ZEvalData:
+		case znet.ZNStorageData, znet.ZNEvalData:
 			path, err := NewPath(reply.RName())
 			if err != nil {
 				logger.WithField("reply path", reply.RName()).
@@ -121,18 +121,18 @@ func (w *Workspace) Get(selector *Selector) []Entry {
 			info := reply.Info()
 			encoding := info.Encoding()
 			ts := info.Tstamp()
-			if reply.Kind() == znet.ZStorageData {
+			if reply.Kind() == znet.ZNStorageData {
 				logger.WithFields(log.Fields{
 					"reply path": reply.RName(),
 					"len(data)":  len(data),
 					"encoding":   encoding,
-				}).Trace("Get => Z_STORAGE_DATA")
+				}).Trace("Get => ZN_STORAGE_DATA")
 			} else {
 				logger.WithFields(log.Fields{
 					"reply path": reply.RName(),
 					"len(data)":  len(data),
 					"encoding":   encoding,
-				}).Trace("Get => Z_EVAL_DATA")
+				}).Trace("Get => ZN_EVAL_DATA")
 			}
 
 			decoder, ok := valueDecoders[encoding]
@@ -156,14 +156,14 @@ func (w *Workspace) Get(selector *Selector) []Entry {
 			l, _ := qresults[*path]
 			qresults[*path] = append(l, entry)
 
-		case znet.ZStorageFinal:
-			logger.Trace("Get => Z_STORAGE_FINAL")
+		case znet.ZNStorageFinal:
+			logger.Trace("Get => ZN_STORAGE_FINAL")
 
-		case znet.ZEvalFinal:
-			logger.Trace("Get => Z_EVAL_FINAL")
+		case znet.ZNEvalFinal:
+			logger.Trace("Get => ZN_EVAL_FINAL")
 
-		case znet.ZReplyFinal:
-			logger.WithField("nb replies", len(qresults)).Trace("Get => Z_REPLY_FINAL")
+		case znet.ZNReplyFinal:
+			logger.WithField("nb replies", len(qresults)).Trace("Get => ZN_REPLY_FINAL")
 			queryFinished = true
 			mu.Lock()
 			defer mu.Unlock()
@@ -204,19 +204,19 @@ func (w *Workspace) Subscribe(selector *Selector, listener Listener) (*Subscript
 	logger := logger.WithField("selector", s)
 	logger.Debug("Subscribe")
 
-	zListener := func(rid string, data []byte, info *znet.DataInfo) {
+	zListener := func(rname string, data []byte, info *znet.DataInfo) {
 		var changes = make([]Change, 1)
 		var err error
-		changes[0].path, err = NewPath(rid)
+		changes[0].path, err = NewPath(rname)
 		if err != nil {
-			logger.WithField("notif path", rid).Warn("Subscribe received a notification for an invalid path")
+			logger.WithField("notif path", rname).Warn("Subscribe received a notification for an invalid path")
 			return
 		}
 		encoding := info.Encoding()
 		decoder, ok := valueDecoders[encoding]
 		if !ok {
 			logger.WithFields(log.Fields{
-				"notif path": rid,
+				"notif path": rname,
 				"encoding":   encoding,
 			}).Warn("Subscribe received a notification with an encoding, but no Decoder found for it")
 			return
@@ -224,7 +224,7 @@ func (w *Workspace) Subscribe(selector *Selector, listener Listener) (*Subscript
 		changes[0].value, err = decoder(data)
 		if err != nil {
 			logger.WithFields(log.Fields{
-				"notif path": rid,
+				"notif path": rname,
 				"encoding":   encoding,
 				"error":      err,
 			}).Warn("Subscribe received a notification, but Decoder failed to decode")
@@ -242,7 +242,7 @@ func (w *Workspace) Subscribe(selector *Selector, listener Listener) (*Subscript
 		}
 	}
 
-	sub, err := w.session.DeclareSubscriber(s.Path(), znet.NewSubMode(znet.ZPushMode), zListener)
+	sub, err := w.session.DeclareSubscriber(s.Path(), znet.NewSubMode(znet.ZNPushMode), zListener)
 	if err != nil {
 		return nil, &ZError{"Subscribe on " + s.ToString() + " failed", err}
 	}
