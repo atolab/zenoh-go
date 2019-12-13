@@ -276,14 +276,14 @@ func (w *Workspace) RegisterEval(path *Path, eval Eval) error {
 		}
 
 		evalRoutine := func() {
-			v := eval(path, predicateToProperties(s.Properties()))
+			v := eval(p, predicateToProperties(s.Properties()))
 			logger.WithFields(log.Fields{
 				"rname":     rname,
 				"predicate": predicate,
 				"value":     v,
 			}).Debug("Registered eval handling query returns")
 			replies := make([]znet.Resource, 1)
-			replies[0].RName = path.ToString()
+			replies[0].RName = p.ToString()
 			replies[0].Data = v.Encode()
 			replies[0].Encoding = v.Encoding()
 			replies[0].Kind = PUT
