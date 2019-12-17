@@ -10,10 +10,9 @@ inline void call_replies_sender(zn_replies_sender_t send_replies, void *query_ha
 */
 import "C"
 import (
-	"strconv"
-	"time"
-	"encoding/hex"
 	"unsafe"
+
+	zcore "github.com/atolab/zenoh-go/core"
 )
 
 const (
@@ -38,21 +37,15 @@ const (
 	PasswdKey = C.ZN_PASSWD_KEY
 )
 
-// ZNError reports an error that occurred in the zenoh-c library
-type ZNError struct {
-	msg  string
-	code int
-}
-
-// Error returns the message associated to a ZNError
-func (e *ZNError) Error() string {
-	return e.msg + " (error code:" + strconv.Itoa(e.code) + ")"
-}
-
+// ZError reports an error that occurred in zenoh.
+type ZError = zcore.ZError
 
 //
 // Types and helpers
 //
+
+// Timestamp is a Zenoh timestamp
+type Timestamp = zcore.Timestamp
 
 // Session is the C session type
 type Session = C.zn_session_t
@@ -206,8 +199,11 @@ func (info *DataInfo) Flags() uint {
 }
 
 // Tstamp returns the timestamp from a DataInfo
-func (info *DataInfo) Tstamp() Timestamp {
-	return info.tstamp
+func (info *DataInfo) Tstamp() *Timestamp {
+	// As CGO generates 2 different structs for C.z_timestamp_t in zenoh/core
+	// and zenoh/net packages, we need to do this unsafe.Pointer conversion.
+	// See https://github.com/golang/go/issues/13467
+	return (*Timestamp)(unsafe.Pointer(&info.tstamp))
 }
 
 // Encoding returns the encoding from a DataInfo
@@ -218,59 +214,6 @@ func (info *DataInfo) Encoding() uint8 {
 // Kind returns the kind from a DataInfo
 func (info *DataInfo) Kind() uint8 {
 	return uint8(info.kind)
-}
-
-// Timestamp is a Zenoh timestamp
-type Timestamp = C.z_timestamp_t
-
-// ClockID returns the clock id of a Timestamp
-func (ts *Timestamp) ClockID() [16]byte {
-	return *(*[16]byte)(unsafe.Pointer(&ts.clock_id))
-}
-
-// Time returns the time of a Timestamp
-func (ts *Timestamp) Time() uint64 {
-	return uint64(ts.time)
-}
-
-// number of NTP fraction per second (2^32)
-const fracPerSec = 0x100000000
-
-// number of nanoseconds per second (10^9)
-const nanoPerSec = 1000000000
-
-// GoTime returns the time of a Timestamp as a Go time.Time
-func (ts *Timestamp) GoTime() time.Time {
-	sec := ts.time >> 32
-	frac := ts.time & 0xffffffff
-	ns := (frac * nanoPerSec) / fracPerSec
-	return time.Unix(int64(sec), int64(ns))
-}
-
-// Before reports whether the Timestamp ts was created before ots.
-// This function can be used for sorting.
-func (ts *Timestamp) Before(ots *Timestamp) bool {
-	if ts.time < ots.time {
-		return true
-	} else if ts.time > ots.time {
-		return false
-	} else {
-		for i, b := range ts.clock_id {
-			if b < ots.clock_id[i] {
-				return true
-			} else if b > ots.clock_id[i] {
-				return false
-			}
-		}
-	}
-	return false
-}
-
-// String returns the Timestamp as a string
-func (ts *Timestamp) String() string {
-	clk := ts.ClockID()
-	s := ts.GoTime().In(time.UTC).Format(time.RFC3339Nano) + "/" + hex.EncodeToString(clk[:])
-	return s
 }
 
 // ReplyKind is the kind of a ReplyValue

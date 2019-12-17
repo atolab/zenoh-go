@@ -27,7 +27,7 @@ func newZenoh(s *znet.Session) (*Zenoh, error) {
 	props := s.Info()
 	pid, ok := props[znet.InfoPeerPidKey]
 	if !ok {
-		return nil, &ZError{"Failed to retrieve Zenoh id from Session info", nil}
+		return nil, &ZError{"Failed to retrieve Zenoh id from Session info", 0, nil}
 	}
 	zenohid := hex.EncodeToString(pid)
 	adminPath, _ := NewPath("/@")
@@ -57,7 +57,7 @@ func Login(locator *string, properties Properties) (*Zenoh, error) {
 	logger.WithField("locator", locator).Debug("Establishing session to Zenoh router")
 	z, e := znet.Open(locator, getZProps(properties))
 	if e != nil {
-		return nil, &ZError{"Login failed", e}
+		return nil, &ZError{"Login failed", 0, e}
 	}
 	return newZenoh(z)
 }
@@ -65,7 +65,7 @@ func Login(locator *string, properties Properties) (*Zenoh, error) {
 // Logout terminates the Zenoh session.
 func (z *Zenoh) Logout() error {
 	if e := z.session.Close(); e != nil {
-		return &ZError{"Error during logout", e}
+		return &ZError{"Error during logout", 0, e}
 	}
 	return nil
 }

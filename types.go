@@ -6,24 +6,15 @@ import (
 	"strconv"
 	"strings"
 
+	zcore "github.com/atolab/zenoh-go/core"
 	znet "github.com/atolab/zenoh-go/net"
 )
 
-// ZError reports an error that occurred in Zenoh.
-type ZError struct {
-	msg   string
-	cause error
-}
-
-func (e *ZError) Error() string {
-	if e.cause != nil {
-		return e.msg + " - caused by:" + e.cause.Error()
-	}
-	return e.msg
-}
+// ZError reports an error that occurred in zenoh.
+type ZError = zcore.ZError
 
 // Timestamp is a Zenoh Timestamp
-type Timestamp = znet.Timestamp
+type Timestamp = zcore.Timestamp
 
 // Properties is a (string,string) map
 type Properties map[string]string
@@ -50,12 +41,12 @@ type Path struct {
 // Otherwise, it returns an error.
 func NewPath(p string) (*Path, error) {
 	if len(p) == 0 {
-		return nil, &ZError{"Invalid path (empty String)", nil}
+		return nil, &ZError{"Invalid path (empty String)", 0, nil}
 	}
 
 	for i, c := range p {
 		if c == '?' || c == '#' || c == '[' || c == ']' || c == '*' {
-			return nil, &ZError{"Invalid path: " + p + " (forbidden character at index " + strconv.Itoa(i) + ")", nil}
+			return nil, &ZError{"Invalid path: " + p + " (forbidden character at index " + strconv.Itoa(i) + ")", 0, nil}
 		}
 	}
 	result := removeUselessSlashes(p)
@@ -118,11 +109,11 @@ var pattern = regexp.MustCompile(
 // Otherwise, it returns an error.
 func NewSelector(s string) (*Selector, error) {
 	if len(s) == 0 {
-		return nil, &ZError{"Invalid selector (empty String)", nil}
+		return nil, &ZError{"Invalid selector (empty String)", 0, nil}
 	}
 
 	if !pattern.MatchString(s) {
-		return nil, &ZError{"Invalid selector (not matching regex)", nil}
+		return nil, &ZError{"Invalid selector (not matching regex)", 0, nil}
 	}
 
 	groups := pattern.FindStringSubmatch(s)
@@ -284,7 +275,7 @@ var valueDecoders = map[Encoding]ValueDecoder{}
 // RegisterValueDecoder registers a ValueDecoder function with it's Encoding
 func RegisterValueDecoder(encoding Encoding, decoder ValueDecoder) error {
 	if valueDecoders[encoding] != nil {
-		return &ZError{"Already registered ValueDecoder for Encoding " + strconv.Itoa(int(encoding)), nil}
+		return &ZError{"Already registered ValueDecoder for Encoding " + strconv.Itoa(int(encoding)), 0, nil}
 	}
 	valueDecoders[encoding] = decoder
 	return nil

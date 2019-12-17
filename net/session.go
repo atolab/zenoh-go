@@ -60,7 +60,7 @@ func Open(locator *string, properties map[int][]byte) (*Session, error) {
 
 	result := C.zn_open(l, nil, &pvec)
 	if result.tag == C.Z_ERROR_TAG {
-		return nil, &ZNError{"zn_open failed", resultValueToErrorCode(result.value)}
+		return nil, &ZError{"zn_open failed", resultValueToErrorCode(result.value), nil}
 	}
 	s := resultValueToSession(result.value)
 
@@ -75,11 +75,11 @@ func (s *Session) Close() error {
 	logger.Debug("Close")
 	errcode := C.zn_stop_recv_loop(s)
 	if errcode != 0 {
-		return &ZNError{"zn_stop_recv_loop failed", int(errcode)}
+		return &ZError{"zn_stop_recv_loop failed", int(errcode), nil}
 	}
 	errcode = C.zn_close(s)
 	if errcode != 0 {
-		return &ZNError{"zn_close failed", int(errcode)}
+		return &ZError{"zn_close failed", int(errcode), nil}
 	}
 	return nil
 }
@@ -156,7 +156,7 @@ func (s *Session) DeclareSubscriber(resource string, mode SubMode, dataHandler D
 		unsafe.Pointer(uintptr(subReg.index)))
 	if result.tag == C.Z_ERROR_TAG {
 		delete(subReg.dHandler, subReg.index)
-		return nil, &ZNError{"zn_declare_subscriber for " + resource + " failed", resultValueToErrorCode(result.value)}
+		return nil, &ZError{"zn_declare_subscriber for " + resource + " failed", resultValueToErrorCode(result.value), nil}
 	}
 
 	sub := new(Subscriber)
@@ -177,7 +177,7 @@ func (s *Session) DeclarePublisher(resource string) (*Publisher, error) {
 
 	result := C.zn_declare_publisher(s, r)
 	if result.tag == C.Z_ERROR_TAG {
-		return nil, &ZNError{"zn_declare_publisher for " + resource + " failed", resultValueToErrorCode(result.value)}
+		return nil, &ZError{"zn_declare_publisher for " + resource + " failed", resultValueToErrorCode(result.value), nil}
 	}
 
 	return resultValueToPublisher(result.value), nil
@@ -271,7 +271,7 @@ func (s *Session) DeclareStorage(resource string, dataHandler DataHandler, query
 	if result.tag == C.Z_ERROR_TAG {
 		delete(stoHdlReg.dHandler, stoHdlReg.index)
 		delete(stoHdlReg.qHandler, stoHdlReg.index)
-		return nil, &ZNError{"zn_declare_storage for " + resource + " failed", resultValueToErrorCode(result.value)}
+		return nil, &ZError{"zn_declare_storage for " + resource + " failed", resultValueToErrorCode(result.value), nil}
 	}
 
 	storage := new(Storage)
@@ -338,7 +338,7 @@ func (s *Session) DeclareEval(resource string, handler QueryHandler) (*Eval, err
 		unsafe.Pointer(uintptr(evalHdlReg.index)))
 	if result.tag == C.Z_ERROR_TAG {
 		delete(evalHdlReg.qHandler, evalHdlReg.index)
-		return nil, &ZNError{"zn_declare_eval for " + resource + " failed", resultValueToErrorCode(result.value)}
+		return nil, &ZError{"zn_declare_eval for " + resource + " failed", resultValueToErrorCode(result.value), nil}
 	}
 
 	eval := new(Eval)
@@ -354,7 +354,7 @@ func (p *Publisher) StreamCompactData(payload []byte) error {
 	b, l := bufferToC(payload)
 	result := C.zn_stream_compact_data(p, b, l)
 	if result != 0 {
-		return &ZNError{"zn_stream_compact_data of " + strconv.Itoa(len(payload)) + " bytes buffer failed", int(result)}
+		return &ZError{"zn_stream_compact_data of " + strconv.Itoa(len(payload)) + " bytes buffer failed", int(result), nil}
 	}
 	return nil
 }
@@ -365,7 +365,7 @@ func (p *Publisher) StreamData(payload []byte) error {
 	b, l := bufferToC(payload)
 	result := C.zn_stream_data(p, b, l)
 	if result != 0 {
-		return &ZNError{"zn_stream_data of " + strconv.Itoa(len(payload)) + " bytes buffer failed", int(result)}
+		return &ZError{"zn_stream_data of " + strconv.Itoa(len(payload)) + " bytes buffer failed", int(result), nil}
 	}
 	return nil
 }
@@ -380,7 +380,7 @@ func (s *Session) WriteData(resource string, payload []byte) error {
 	b, l := bufferToC(payload)
 	result := C.zn_write_data(s, r, b, l)
 	if result != 0 {
-		return &ZNError{"zn_write_data of " + strconv.Itoa(len(payload)) + " bytes buffer on " + resource + "failed", int(result)}
+		return &ZError{"zn_write_data of " + strconv.Itoa(len(payload)) + " bytes buffer on " + resource + "failed", int(result), nil}
 	}
 	return nil
 }
@@ -393,7 +393,7 @@ func (p *Publisher) StreamDataWO(payload []byte, encoding uint8, kind uint8) err
 	b, l := bufferToC(payload)
 	result := C.zn_stream_data_wo(p, b, l, C.uchar(encoding), C.uchar(kind))
 	if result != 0 {
-		return &ZNError{"zn_stream_data_wo of " + strconv.Itoa(len(payload)) + " bytes buffer failed", int(result)}
+		return &ZError{"zn_stream_data_wo of " + strconv.Itoa(len(payload)) + " bytes buffer failed", int(result), nil}
 	}
 	return nil
 }
@@ -410,7 +410,7 @@ func (s *Session) WriteDataWO(resource string, payload []byte, encoding uint8, k
 	b, l := bufferToC(payload)
 	result := C.zn_write_data_wo(s, r, b, l, C.uchar(encoding), C.uchar(kind))
 	if result != 0 {
-		return &ZNError{"zn_write_data_wo of " + strconv.Itoa(len(payload)) + " bytes buffer on " + resource + "failed", int(result)}
+		return &ZError{"zn_write_data_wo of " + strconv.Itoa(len(payload)) + " bytes buffer on " + resource + "failed", int(result), nil}
 	}
 	return nil
 }
@@ -420,7 +420,7 @@ func (s *Session) WriteDataWO(resource string, payload []byte, encoding uint8, k
 func (s *Subscriber) Pull() error {
 	result := C.zn_pull(s.zsub)
 	if result != 0 {
-		return &ZNError{"zn_pull failed", int(result)}
+		return &ZError{"zn_pull failed", int(result), nil}
 	}
 	return nil
 }
@@ -482,7 +482,7 @@ func (s *Session) Query(resource string, predicate string, replyHandler ReplyHan
 		(C.zn_reply_handler_t)(unsafe.Pointer(C.handle_reply_cgo)),
 		unsafe.Pointer(uintptr(replyReg.index)))
 	if result != 0 {
-		return &ZNError{"zn_query on " + resource + "failed", int(result)}
+		return &ZError{"zn_query on " + resource + "failed", int(result), nil}
 	}
 	return nil
 }
@@ -513,7 +513,7 @@ func (s *Session) QueryWO(resource string, predicate string, replyHandler ReplyH
 		unsafe.Pointer(uintptr(replyReg.index)),
 		destStorages, destEvals)
 	if result != 0 {
-		return &ZNError{"zn_query on " + resource + "failed", int(result)}
+		return &ZError{"zn_query on " + resource + "failed", int(result), nil}
 	}
 	return nil
 }
@@ -522,7 +522,7 @@ func (s *Session) QueryWO(resource string, predicate string, replyHandler ReplyH
 func (s *Session) UndeclareSubscriber(sub *Subscriber) error {
 	result := C.zn_undeclare_subscriber(sub.zsub)
 	if result != 0 {
-		return &ZNError{"zn_undeclare_subscriber failed", int(result)}
+		return &ZError{"zn_undeclare_subscriber failed", int(result), nil}
 	}
 	subReg.mu.Lock()
 	delete(subReg.dHandler, sub.regIndex)
@@ -535,7 +535,7 @@ func (s *Session) UndeclareSubscriber(sub *Subscriber) error {
 func (s *Session) UndeclarePublisher(p *Publisher) error {
 	result := C.zn_undeclare_publisher(p)
 	if result != 0 {
-		return &ZNError{"zn_undeclare_publisher failed", int(result)}
+		return &ZError{"zn_undeclare_publisher failed", int(result), nil}
 	}
 	return nil
 }
@@ -544,7 +544,7 @@ func (s *Session) UndeclarePublisher(p *Publisher) error {
 func (s *Session) UndeclareStorage(sto *Storage) error {
 	result := C.zn_undeclare_storage(sto.zsto)
 	if result != 0 {
-		return &ZNError{"zn_undeclare_storage failed", int(result)}
+		return &ZError{"zn_undeclare_storage failed", int(result), nil}
 	}
 	stoHdlReg.mu.Lock()
 	delete(stoHdlReg.dHandler, sto.regIndex)
@@ -558,7 +558,7 @@ func (s *Session) UndeclareStorage(sto *Storage) error {
 func (s *Session) UndeclareEval(e *Eval) error {
 	result := C.zn_undeclare_eval(e.zeval)
 	if result != 0 {
-		return &ZNError{"zn_undeclare_eval failed", int(result)}
+		return &ZError{"zn_undeclare_eval failed", int(result), nil}
 	}
 	evalHdlReg.mu.Lock()
 	delete(evalHdlReg.qHandler, e.regIndex)

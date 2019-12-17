@@ -24,7 +24,7 @@ func (a *Admin) AddBackend(beid string, properties Properties) error {
 func (a *Admin) AddBackendAt(beid string, properties Properties, zenoh string) error {
 	path, err := NewPath(fmt.Sprintf("/@/%s/plugins/yaks/backend/%s", zenoh, beid))
 	if err != nil {
-		return &ZError{"Invalid backend id: " + beid, err}
+		return &ZError{"Invalid backend id: " + beid, 0, err}
 	}
 	return a.w.Put(path, NewPropertiesValue(properties))
 }
@@ -38,7 +38,7 @@ func (a *Admin) GetBackend(beid string) (Properties, error) {
 func (a *Admin) GetBackendAt(beid string, zenoh string) (Properties, error) {
 	selector, err := NewSelector(fmt.Sprintf("/@/%s/plugins/yaks/backend/%s", zenoh, beid))
 	if err != nil {
-		return nil, &ZError{"Invalid backend id: " + beid, err}
+		return nil, &ZError{"Invalid backend id: " + beid, 0, err}
 	}
 	pvs := a.w.Get(selector)
 	if len(pvs) == 0 {
@@ -74,7 +74,7 @@ func (a *Admin) RemoveBackend(beid string) error {
 func (a *Admin) RemoveBackendAt(beid string, zenoh string) error {
 	path, err := NewPath(fmt.Sprintf("/@/%s/plugins/yaks/backend/%s", zenoh, beid))
 	if err != nil {
-		return &ZError{"Invalid backend id: " + beid, err}
+		return &ZError{"Invalid backend id: " + beid, 0, err}
 	}
 	return a.w.Remove(path)
 }
@@ -102,7 +102,7 @@ func (a *Admin) AddStorageOnBackend(stid string, properties Properties, backend 
 func (a *Admin) AddStorageOnBackendAt(stid string, properties Properties, backend string, zenoh string) error {
 	path, err := NewPath(fmt.Sprintf("/@/%s/plugins/yaks/backend/%s/storage/%s", zenoh, backend, stid))
 	if err != nil {
-		return &ZError{"Invalid backend or storage id in path: " + path.ToString(), err}
+		return &ZError{"Invalid backend or storage id in path: " + path.ToString(), 0, err}
 	}
 	return a.w.Put(path, NewPropertiesValue(properties))
 }
@@ -116,7 +116,7 @@ func (a *Admin) GetStorage(stid string) (Properties, error) {
 func (a *Admin) GetStorageAt(stid string, zenoh string) (Properties, error) {
 	selector, err := NewSelector(fmt.Sprintf("/@/%s/plugins/yaks/backend/*/storage/%s", zenoh, stid))
 	if err != nil {
-		return nil, &ZError{"Invalid storage id: " + stid, err}
+		return nil, &ZError{"Invalid storage id: " + stid, 0, err}
 	}
 	pvs := a.w.Get(selector)
 	if len(pvs) == 0 {
@@ -145,7 +145,7 @@ func (a *Admin) GetStoragesFromBackendAt(backend string, zenoh string) (map[stri
 	sel := fmt.Sprintf("/@/%s/plugins/yaks/backend/%s/storage/*", zenoh, backend)
 	selector, err := NewSelector(sel)
 	if err != nil {
-		return nil, &ZError{"Invalid backend id: " + backend, err}
+		return nil, &ZError{"Invalid backend id: " + backend, 0, err}
 	}
 	pvs := a.w.Get(selector)
 	result := make(map[string]Properties)
@@ -166,7 +166,7 @@ func (a *Admin) RemoveStorage(stid string) error {
 func (a *Admin) RemoveStorageAt(stid string, zenoh string) error {
 	selector, err := NewSelector(fmt.Sprintf("/@/%s/plugins/yaks/backend/*/storage/%s", zenoh, stid))
 	if err != nil {
-		return &ZError{"Invalid storage id: " + stid, err}
+		return &ZError{"Invalid storage id: " + stid, 0, err}
 	}
 	pvs := a.w.Get(selector)
 	for _, pv := range pvs {

@@ -25,7 +25,7 @@ func (w *Workspace) Put(path *Path, value Value) error {
 	}).Debug("Put")
 	p := w.toAbsolutePath(path)
 	if e := w.session.WriteDataWO(p.ToString(), value.Encode(), value.Encoding(), PUT); e != nil {
-		return &ZError{"Put on " + p.ToString() + " failed", e}
+		return &ZError{"Put on " + p.ToString() + " failed", 0, e}
 	}
 	return nil
 }
@@ -38,7 +38,7 @@ func (w *Workspace) Update(path *Path, value Value) error {
 	}).Debug("Update")
 	p := w.toAbsolutePath(path)
 	if e := w.session.WriteDataWO(p.ToString(), value.Encode(), value.Encoding(), UPDATE); e != nil {
-		return &ZError{"Put on " + path.ToString() + " failed", e}
+		return &ZError{"Put on " + path.ToString() + " failed", 0, e}
 	}
 	return nil
 }
@@ -48,7 +48,7 @@ func (w *Workspace) Remove(path *Path) error {
 	logger.WithField("path", path).Debug("Remove")
 	p := w.toAbsolutePath(path)
 	if e := w.session.WriteDataWO(p.ToString(), nil, 0, REMOVE); e != nil {
-		return &ZError{"Put on " + path.ToString() + " failed", e}
+		return &ZError{"Put on " + path.ToString() + " failed", 0, e}
 	}
 	return nil
 }
@@ -152,7 +152,7 @@ func (w *Workspace) Get(selector *Selector) []Entry {
 				}).Warn("Get : error decoding reply")
 				return
 			}
-			entry := Entry{path, value, &ts}
+			entry := Entry{path, value, ts}
 			l, _ := qresults[*path]
 			qresults[*path] = append(l, entry)
 
@@ -244,7 +244,7 @@ func (w *Workspace) Subscribe(selector *Selector, listener Listener) (*Subscript
 
 	sub, err := w.session.DeclareSubscriber(s.Path(), znet.NewSubMode(znet.ZNPushMode), zListener)
 	if err != nil {
-		return nil, &ZError{"Subscribe on " + s.ToString() + " failed", err}
+		return nil, &ZError{"Subscribe on " + s.ToString() + " failed", 0, err}
 	}
 	return sub, nil
 }
@@ -253,7 +253,7 @@ func (w *Workspace) Subscribe(selector *Selector, listener Listener) (*Subscript
 func (w *Workspace) Unsubscribe(subid *SubscriptionID) error {
 	err := w.session.UndeclareSubscriber(subid)
 	if err != nil {
-		return &ZError{"Unsubscribe failed", err}
+		return &ZError{"Unsubscribe failed", 0, err}
 	}
 	return nil
 }
@@ -298,7 +298,7 @@ func (w *Workspace) RegisterEval(path *Path, eval Eval) error {
 
 	e, err := w.session.DeclareEval(p.ToString(), zQueryHandler)
 	if err != nil {
-		return &ZError{"RegisterEval on " + p.ToString() + " failed", err}
+		return &ZError{"RegisterEval on " + p.ToString() + " failed", 0, err}
 	}
 	w.evals[*p] = e
 	return nil
@@ -311,7 +311,7 @@ func (w *Workspace) UnregisterEval(path *Path) error {
 		delete(w.evals, *path)
 		err := w.session.UndeclareEval(e)
 		if err != nil {
-			return &ZError{"UnregisterEval on " + path.ToString() + " failed", err}
+			return &ZError{"UnregisterEval on " + path.ToString() + " failed", 0, err}
 		}
 	}
 	return nil
