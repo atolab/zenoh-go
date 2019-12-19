@@ -22,7 +22,7 @@ func (a *Admin) AddBackend(beid string, properties Properties) error {
 
 // AddBackendAt adds a backend in the specified Zenoh router.
 func (a *Admin) AddBackendAt(beid string, properties Properties, zenoh string) error {
-	path, err := NewPath(fmt.Sprintf("/@/%s/plugins/yaks/backend/%s", zenoh, beid))
+	path, err := NewPath(fmt.Sprintf("/@/router/%s/plugin/storages/backend/%s", zenoh, beid))
 	if err != nil {
 		return &ZError{"Invalid backend id: " + beid, 0, err}
 	}
@@ -36,7 +36,7 @@ func (a *Admin) GetBackend(beid string) (Properties, error) {
 
 // GetBackendAt gets a backend's properties from the specified Zenoh router.
 func (a *Admin) GetBackendAt(beid string, zenoh string) (Properties, error) {
-	selector, err := NewSelector(fmt.Sprintf("/@/%s/plugins/yaks/backend/%s", zenoh, beid))
+	selector, err := NewSelector(fmt.Sprintf("/@/router/%s/plugin/storages/backend/%s", zenoh, beid))
 	if err != nil {
 		return nil, &ZError{"Invalid backend id: " + beid, 0, err}
 	}
@@ -54,7 +54,7 @@ func (a *Admin) GetBackends() (map[string]Properties, error) {
 
 // GetBackendsAt gets all the backends from the specified Zenoh router.
 func (a *Admin) GetBackendsAt(zenoh string) (map[string]Properties, error) {
-	sel := fmt.Sprintf("/@/%s/plugins/yaks/backend/*", zenoh)
+	sel := fmt.Sprintf("/@/router/%s/plugin/storages/backend/*", zenoh)
 	selector, _ := NewSelector(sel)
 	pvs := a.w.Get(selector)
 	result := make(map[string]Properties)
@@ -72,7 +72,7 @@ func (a *Admin) RemoveBackend(beid string) error {
 
 // RemoveBackendAt removes a backend from the specified Zenoh router.
 func (a *Admin) RemoveBackendAt(beid string, zenoh string) error {
-	path, err := NewPath(fmt.Sprintf("/@/%s/plugins/yaks/backend/%s", zenoh, beid))
+	path, err := NewPath(fmt.Sprintf("/@/router/%s/plugin/storages/backend/%s", zenoh, beid))
 	if err != nil {
 		return &ZError{"Invalid backend id: " + beid, 0, err}
 	}
@@ -100,7 +100,7 @@ func (a *Admin) AddStorageOnBackend(stid string, properties Properties, backend 
 
 // AddStorageOnBackendAt adds a storage in the specified Zenoh router, using the specified backend.
 func (a *Admin) AddStorageOnBackendAt(stid string, properties Properties, backend string, zenoh string) error {
-	path, err := NewPath(fmt.Sprintf("/@/%s/plugins/yaks/backend/%s/storage/%s", zenoh, backend, stid))
+	path, err := NewPath(fmt.Sprintf("/@/router/%s/plugin/storages/backend/%s/storage/%s", zenoh, backend, stid))
 	if err != nil {
 		return &ZError{"Invalid backend or storage id in path: " + path.ToString(), 0, err}
 	}
@@ -114,7 +114,7 @@ func (a *Admin) GetStorage(stid string) (Properties, error) {
 
 // GetStorageAt gets a storage's properties from the specified Zenoh router.
 func (a *Admin) GetStorageAt(stid string, zenoh string) (Properties, error) {
-	selector, err := NewSelector(fmt.Sprintf("/@/%s/plugins/yaks/backend/*/storage/%s", zenoh, stid))
+	selector, err := NewSelector(fmt.Sprintf("/@/router/%s/plugin/storages/backend/*/storage/%s", zenoh, stid))
 	if err != nil {
 		return nil, &ZError{"Invalid storage id: " + stid, 0, err}
 	}
@@ -142,7 +142,7 @@ func (a *Admin) GetStoragesFromBackend(backend string) (map[string]Properties, e
 
 // GetStoragesFromBackendAt gets all the storages from the specified backend within the specified Zenoh router.
 func (a *Admin) GetStoragesFromBackendAt(backend string, zenoh string) (map[string]Properties, error) {
-	sel := fmt.Sprintf("/@/%s/plugins/yaks/backend/%s/storage/*", zenoh, backend)
+	sel := fmt.Sprintf("/@/router/%s/plugin/storages/backend/%s/storage/*", zenoh, backend)
 	selector, err := NewSelector(sel)
 	if err != nil {
 		return nil, &ZError{"Invalid backend id: " + backend, 0, err}
@@ -164,7 +164,7 @@ func (a *Admin) RemoveStorage(stid string) error {
 
 // RemoveStorageAt removes a storage from the specified Zenoh router.
 func (a *Admin) RemoveStorageAt(stid string, zenoh string) error {
-	selector, err := NewSelector(fmt.Sprintf("/@/%s/plugins/yaks/backend/*/storage/%s", zenoh, stid))
+	selector, err := NewSelector(fmt.Sprintf("/@/router/%s/plugin/storages/backend/*/storage/%s", zenoh, stid))
 	if err != nil {
 		return &ZError{"Invalid storage id: " + stid, 0, err}
 	}
