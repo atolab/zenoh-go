@@ -53,32 +53,32 @@ func (w *Workspace) Remove(path *Path) error {
 	return nil
 }
 
-// entries: a list of Entry that can be sorted per Timestamp
-type entries []Entry
+// dataset: a list of Data that can be sorted per Timestamp
+type dataset []Data
 
-func (e entries) Len() int {
-	return len(e)
+func (ds dataset) Len() int {
+	return len(ds)
 }
 
-func (e entries) Less(i, j int) bool {
-	return e[i].Timestamp().Before(e[j].Timestamp())
+func (ds dataset) Less(i, j int) bool {
+	return ds[i].Timestamp().Before(ds[j].Timestamp())
 }
 
-func (e entries) Swap(i, j int) {
-	e[i], e[j] = e[j], e[i]
+func (ds dataset) Swap(i, j int) {
+	ds[i], ds[j] = ds[j], ds[i]
 }
 
-// asSortedSet returns a sorted copy of the entries list, removing duplicate (i.e. with same timestamp)
-func (e entries) asSortedSet() entries {
+// asSortedSet returns a sorted copy of the dataset, removing duplicate (i.e. with same timestamp)
+func (ds dataset) asSortedSet() dataset {
 	// sort
-	sort.Sort(e)
+	sort.Sort(ds)
 	// remove duplicates
-	res := make([]Entry, 0)
+	res := make([]Data, 0)
 	var ts *Timestamp
-	for _, entry := range e {
-		if ts == nil || *entry.Timestamp() != *ts {
-			res = append(res, entry)
-			ts = entry.Timestamp()
+	for _, data := range ds {
+		if ts == nil || *data.Timestamp() != *ts {
+			res = append(res, data)
+			ts = data.Timestamp()
 		}
 	}
 	return res
@@ -97,12 +97,12 @@ func isSelectorForSeries(selector *Selector) bool {
 }
 
 // Get a selection of path/value from Zenoh.
-func (w *Workspace) Get(selector *Selector) []Entry {
+func (w *Workspace) Get(selector *Selector) []Data {
 	s := w.toAbsoluteSelector(selector)
 	logger := logger.WithField("selector", s)
 	logger.Debug("Get")
 
-	qresults := make(map[Path]entries)
+	qresults := make(map[Path]dataset)
 	queryFinished := false
 
 	mu := new(sync.Mutex)
@@ -152,9 +152,9 @@ func (w *Workspace) Get(selector *Selector) []Entry {
 				}).Warn("Get : error decoding reply")
 				return
 			}
-			entry := Entry{path, value, ts}
+			d := Data{path, value, ts}
 			l, _ := qresults[*path]
-			qresults[*path] = append(l, entry)
+			qresults[*path] = append(l, d)
 
 		case znet.ZNStorageFinal:
 			logger.Trace("Get => ZN_STORAGE_FINAL")
@@ -178,21 +178,21 @@ func (w *Workspace) Get(selector *Selector) []Entry {
 		cond.Wait()
 	}
 
-	results := make([]Entry, 0)
+	results := make([]Data, 0)
 	if isSelectorForSeries(selector) {
-		// return all entries
-		for _, entries := range qresults {
-			entries = entries.asSortedSet()
-			for _, e := range entries {
-				results = append(results, e)
+		// return all data
+		for _, dataset := range qresults {
+			dataset = dataset.asSortedSet()
+			for _, d := range dataset {
+				results = append(results, d)
 			}
 		}
 	} else {
-		// return only the latest entry for each path
-		for _, entries := range qresults {
-			entries = entries.asSortedSet()
-			e := entries[len(entries)-1]
-			results = append(results, e)
+		// return only the latest data for each path
+		for _, dataset := range qresults {
+			dataset = dataset.asSortedSet()
+			d := dataset[len(dataset)-1]
+			results = append(results, d)
 		}
 	}
 	return results

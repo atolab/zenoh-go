@@ -185,28 +185,28 @@ func (s *Selector) AddPrefix(prefix *Path) *Selector {
 }
 
 ///////////////
-//   Entry   //
+//    Data   //
 ///////////////
 
-// Entry is a Path + Value + Timestamp tuple
-type Entry struct {
+// Data is a Path + Value + Timestamp tuple
+type Data struct {
 	path   *Path
 	value  Value
 	tstamp *Timestamp
 }
 
-// Path returns the path of the Entry
-func (e *Entry) Path() *Path {
+// Path returns the path of the Data
+func (e *Data) Path() *Path {
 	return e.path
 }
 
-// Value returns the value of the Entry
-func (e *Entry) Value() Value {
+// Value returns the value of the Data
+func (e *Data) Value() Value {
 	return e.value
 }
 
-// Timestamp returns the timestamp of the Entry
-func (e *Entry) Timestamp() *Timestamp {
+// Timestamp returns the timestamp of the Data
+func (e *Data) Timestamp() *Timestamp {
 	return e.tstamp
 }
 
