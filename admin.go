@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-// Admin represents the admin interface to operate on Zenoh.
+// Admin is the zenoh administration class.
 type Admin struct {
 	w       *Workspace
 	zenohid string
@@ -15,12 +15,18 @@ type Admin struct {
 // Backends management
 //
 
-// AddBackend adds a backend in the connected Zenoh router.
+// AddBackend adds a backend in the connected Zenoh router
+// (i.e. the one you are directly connected to).
+//
+// The backend will use the properties for initialization and "beid" as identifier. 
 func (a *Admin) AddBackend(beid string, properties Properties) error {
 	return a.AddBackendAt(beid, properties, a.zenohid)
 }
 
-// AddBackendAt adds a backend in the specified Zenoh router.
+// AddBackendAt adds a backend in the specified Zenoh router,
+// not necessarily the one you are connected to.
+//
+// The backend will use the properties for initialization and "beid" as identifier. 
 func (a *Admin) AddBackendAt(beid string, properties Properties, zenoh string) error {
 	path, err := NewPath(fmt.Sprintf("/@/router/%s/plugin/storages/backend/%s", zenoh, beid))
 	if err != nil {
@@ -30,11 +36,13 @@ func (a *Admin) AddBackendAt(beid string, properties Properties, zenoh string) e
 }
 
 // GetBackend gets a backend's properties from the connected Zenoh router.
+// (i.e. the one you are directly connected to).
 func (a *Admin) GetBackend(beid string) (Properties, error) {
 	return a.GetBackendAt(beid, a.zenohid)
 }
 
-// GetBackendAt gets a backend's properties from the specified Zenoh router.
+// GetBackendAt gets a backend's properties from the specified Zenoh router,
+// not necessarily the one you are connected to.
 func (a *Admin) GetBackendAt(beid string, zenoh string) (Properties, error) {
 	selector, err := NewSelector(fmt.Sprintf("/@/router/%s/plugin/storages/backend/%s", zenoh, beid))
 	if err != nil {
@@ -47,12 +55,18 @@ func (a *Admin) GetBackendAt(beid string, zenoh string) (Properties, error) {
 	return propertiesOfValue(pvs[0].Value()), nil
 }
 
-// GetBackends gets all the backends from the connected Zenoh router.
+// GetBackends gets all the backends from the connected Zenoh router
+// (i.e. the one you are directly connected to).
+//
+// It returns a map of the backends properties, indexed by the backends identifiers.
 func (a *Admin) GetBackends() (map[string]Properties, error) {
 	return a.GetBackendsAt(a.zenohid)
 }
 
-// GetBackendsAt gets all the backends from the specified Zenoh router.
+// GetBackendsAt gets all the backends from the specified Zenoh router,
+// not necessarily the one you are connected to.
+//
+// It returns a map of the backends properties, indexed by the backends identifiers.
 func (a *Admin) GetBackendsAt(zenoh string) (map[string]Properties, error) {
 	sel := fmt.Sprintf("/@/router/%s/plugin/storages/backend/*", zenoh)
 	selector, _ := NewSelector(sel)
@@ -65,12 +79,14 @@ func (a *Admin) GetBackendsAt(zenoh string) (map[string]Properties, error) {
 	return result, nil
 }
 
-// RemoveBackend removes a backend from the connected Zenoh router.
+// RemoveBackend removes a backend from the connected Zenoh router
+// (i.e. the one you are directly connected to).
 func (a *Admin) RemoveBackend(beid string) error {
 	return a.RemoveBackendAt(beid, a.zenohid)
 }
 
-// RemoveBackendAt removes a backend from the specified Zenoh router.
+// RemoveBackendAt removes a backend from the specified Zenoh router,
+// not necessarily the one you are connected to.
 func (a *Admin) RemoveBackendAt(beid string, zenoh string) error {
 	path, err := NewPath(fmt.Sprintf("/@/router/%s/plugin/storages/backend/%s", zenoh, beid))
 	if err != nil {
@@ -84,11 +100,15 @@ func (a *Admin) RemoveBackendAt(beid string, zenoh string) error {
 //
 
 // AddStorage adds a storage in the connected Zenoh router, using an automatically chosen backend.
+//
+// The storage will use the properties for initialization and "stid" as identifier. 
 func (a *Admin) AddStorage(stid string, properties Properties) error {
 	return a.AddStorageOnBackendAt(stid, properties, "auto", a.zenohid)
 }
 
 // AddStorageAt adds a storage in the specified Zenoh router, using an automatically chosen backend.
+//
+// The storage will use the properties for initialization and "stid" as identifier. 
 func (a *Admin) AddStorageAt(stid string, properties Properties, zenoh string) error {
 	return a.AddStorageOnBackendAt(stid, properties, "auto", zenoh)
 }
@@ -126,21 +146,29 @@ func (a *Admin) GetStorageAt(stid string, zenoh string) (Properties, error) {
 }
 
 // GetStorages gets all the storages from the connected Zenoh router.
+//
+// It returns a map of the stgorages properties, indexed by the storages identifiers.
 func (a *Admin) GetStorages() (map[string]Properties, error) {
 	return a.GetStoragesFromBackendAt("*", a.zenohid)
 }
 
 // GetStoragesAt gets all the storages from the specified Zenoh router.
+//
+// It returns a map of the stgorages properties, indexed by the storages identifiers.
 func (a *Admin) GetStoragesAt(zenoh string) (map[string]Properties, error) {
 	return a.GetStoragesFromBackendAt("*", a.zenohid)
 }
 
 // GetStoragesFromBackend gets all the storages from the specified backend within the connected Zenoh router.
+//
+// It returns a map of the stgorages properties, indexed by the storages identifiers.
 func (a *Admin) GetStoragesFromBackend(backend string) (map[string]Properties, error) {
 	return a.GetStoragesFromBackendAt(backend, a.zenohid)
 }
 
 // GetStoragesFromBackendAt gets all the storages from the specified backend within the specified Zenoh router.
+//
+// It returns a map of the stgorages properties, indexed by the storages identifiers.
 func (a *Admin) GetStoragesFromBackendAt(backend string, zenoh string) (map[string]Properties, error) {
 	sel := fmt.Sprintf("/@/router/%s/plugin/storages/backend/%s/storage/*", zenoh, backend)
 	selector, err := NewSelector(sel)

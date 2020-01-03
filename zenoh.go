@@ -14,7 +14,7 @@ const PropUser = "user"
 // PropPassword is the "password" property key
 const PropPassword = "password"
 
-// Zenoh is Zenoh
+// Zenoh is the Zenoh client API
 type Zenoh struct {
 	session *znet.Session
 	zenohid string
@@ -48,11 +48,15 @@ func getZProps(properties Properties) map[int][]byte {
 	return zprops
 }
 
-// Login establishes a session with the Zenoh router reachable via provided locator.
-// If the provided locator is nil, 'login' will perform some dynamic discovery and try to
-// establish the session automaticallz. When not nil, the locator must have the format:
-// ``tcp/<ip>:<port>``.
-// Properties contains the configuration to be used for this session (e.g. "user", "password"...). It can be nil.
+// Login establishes a zenoh session via a provided locator.
+//
+// Locator is a string representing the network endpoint to which establish the session.
+// If the provided locator is nil, login will perform some dynamic discovery and
+// try to establish the session automatically. When not nil, the locator
+// must have the format: "tcp/<ip>:<port>" (for instance: "tcp/127.0.0.1:7447").
+//
+// Properties contains the configuration to be used for this session
+// (e.g. "user", "password"...). It can be nil.
 func Login(locator *string, properties Properties) (*Zenoh, error) {
 	logger.WithField("locator", locator).Debug("Establishing session to Zenoh router")
 	z, e := znet.Open(locator, getZProps(properties))
@@ -72,6 +76,7 @@ func (z *Zenoh) Logout() error {
 
 // Workspace creates a Workspace using the provided path.
 // All relative Selector or Path used with this Workspace will be relative to this path.
+//
 // Notice that all subscription listeners and eval callbacks declared in this workspace will be
 // executed by the I/O subroutine. This implies that no long operations or other call to Zenoh
 // shall be performed in those callbacks.
@@ -81,6 +86,7 @@ func (z *Zenoh) Workspace(path *Path) *Workspace {
 
 // WorkspaceWithExecutor creates a Workspace using the provided path.
 // All relative Selector or Path used with this Workspace will be relative to this path.
+//
 // Notice that all subscription listeners and eval callbacks declared in this workspace will be
 // executed by their own subroutine. This is useful when listeners and/or callbacks need to perform
 // long operations or need to call other Zenoh operations.
@@ -88,7 +94,8 @@ func (z *Zenoh) WorkspaceWithExecutor(path *Path) *Workspace {
 	return &Workspace{path, z.session, make(map[Path]*znet.Eval), true}
 }
 
-// Admin returns the admin interface
+// Admin returns the admin object that provides
+// helper operations to administer Zenoh.
 func (z *Zenoh) Admin() *Admin {
 	return z.admin
 }

@@ -32,7 +32,14 @@ type Eval func(path *Path, props Properties) Value
 //    Path    //
 ////////////////
 
-// Path is a path in Zenoh
+// Path is a set of strings separated by '/' , as in a filesystem path.
+// A Path cannot contain any '*' character.
+//
+// Examples of paths:
+//   "/demo/example/test"
+//   "/com/adlink/building/fr/floor/1/office/2"
+//
+// A path can be absolute (i.e. starting with a `'/'`) or relative to a Workspace.
 type Path struct {
 	path string
 }
@@ -85,7 +92,36 @@ func removeUselessSlashes(s string) string {
 //  Selector  //
 ////////////////
 
-// Selector is a selector in Zenoh
+// Selector is a string which is the conjunction of an path expression identifying
+// a set of keys and some optional parts allowing to refine the set of Paths
+// and associated Values.
+//
+// Structure of a selector:
+// 
+//    /s1/s2/../sn?x>1&y<2&..&z=4(p1=v1;p2=v2;..;pn=vn)#a;x;y;..;z
+//    |          | |            | |                  |  |        |
+//    |-- expr --| |-- filter --| |--- properties ---|  |fragment|
+// 
+// where:
+//   
+// - expr: is a path expression. I.e. a string similar to a Path but with character '*'  allowed.
+// A single '*' matches any set of characters in a path, except '/'.
+// While `"**"` matches any set of characters in a path, including '/'.
+// A path expression can be absolute (i.e. starting with a '/') or relative to a Workspace.
+// 
+// - filter: a list of predicates separated by '&' allowing to perform filtering on the Value
+// associated with the matching keys.
+// Each predicate has the form "`field``operator``value`" where:
+// -- `field` is the name of a field in the value (is applicable and is existing. otherwise the predicate is false).
+// -- `operator` is one of a comparison operators: `<` , `>` , `<=`  , `>=`  , `=`  , `!=`.
+// -- `value` is the the value to compare the field's value with.
+// 
+// - fragment: a list of fields names allowing to return a sub-part of each value.
+// This feature only applies to structured values using a "self-describing" encoding, such as JSON or XML.
+// It allows to select only some fields within the structure. A new structure with only the selected fields
+// will be used in place of the original value.
+//
+// NOTE: the filters and fragments are not yet supported in current zenoh version.
 type Selector struct {
 	path         string
 	predicate    string
@@ -188,7 +224,11 @@ func (s *Selector) AddPrefix(prefix *Path) *Selector {
 //    Data   //
 ///////////////
 
-// Data is a Path + Value + Timestamp tuple
+// Data is a zenoh data returned by a Workspace.get(selector) query.
+// 
+// The Data objects are comparable according to their Timestamp.
+// Note that zenoh makes sure that each published path/value
+// has a unique timestamp accross the system.
 type Data struct {
 	path   *Path
 	value  Value
@@ -226,11 +266,14 @@ const (
 	REMOVE ChangeKind = 0x02
 )
 
-// Change represents a change made on a path/value in Zenoh
+// Change represents the notification of a change for a resource in zenoh.
+//
+// The Listener function that is registered in Workspace.subscribe(selector, listener)
+// will receive a list of Changes.
 type Change struct {
 	path  *Path
 	kind  ChangeKind
-	time  uint64
+	timestamp  *Timestamp
 	value Value
 }
 
@@ -244,9 +287,9 @@ func (c *Change) Kind() ChangeKind {
 	return c.kind
 }
 
-// Time returns the time of change (as registered in Zenoh)
-func (c *Change) Time() uint64 {
-	return c.time
+// Timestamp returns the time of change (as registered in Zenoh)
+func (c *Change) Timestamp() *Timestamp {
+	return c.timestamp
 }
 
 // Value returns the value that changed
@@ -258,16 +301,25 @@ func (c *Change) Value() Value {
 //  Encoding  //
 ////////////////
 
-// Encoding is the encoding kind of a Value
+// Encoding is a description of the Value format, allowing zenoh to know
+// how to encode/decode the value to/from a bytes buffer.
 type Encoding = uint8
 
-// Known encodings
+// Known encodings:
 const (
+	// RAW: The value has a RAW encoding (i.e. it's a bytes buffer).
 	RAW        Encoding = 0x00
+
+	// STRING: The value is an UTF-8 string.
 	STRING     Encoding = 0x02
+
+	// PROPERTIES: The value if a list of keys/values, encoded as an UTF-8 string.
+    // The keys/values are separated by ';' character, and each key is separated
+    // from its associated value (if any) with a '=' character.
 	PROPERTIES Encoding = 0x03
+
+	// JSON The value is a JSON structure in an UTF-8 string.
 	JSON       Encoding = 0x04
-	SQL        Encoding = 0x05
 )
 
 var valueDecoders = map[Encoding]ValueDecoder{}
@@ -292,7 +344,9 @@ func init() {
 //   Value    //
 ////////////////
 
-// Value represents a value stored by Zenoh
+// Value is the interface of a value that, associated to a Path, can be published into zenoh
+// via Workspace.put(Path, Value), or retrieved via Workspace.get(Selector) or
+// via a subscription (Workspace.subscribe(Selector, Listener)).
 type Value interface {
 	Encoding() Encoding
 	Encode() []byte

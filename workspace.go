@@ -9,7 +9,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// Workspace represents a workspace to operate on Zenoh.
+// Workspace allows to operate on Zenoh.
 type Workspace struct {
 	path          *Path
 	session       *znet.Session
@@ -199,6 +199,8 @@ func (w *Workspace) Get(selector *Selector) []Data {
 }
 
 // Subscribe subscribes to a selection of path/value from Zenoh.
+//
+// The listener will be called for each change of a path/value matching the selection.
 func (w *Workspace) Subscribe(selector *Selector, listener Listener) (*SubscriptionID, error) {
 	s := w.toAbsoluteSelector(selector)
 	logger := logger.WithField("selector", s)
@@ -232,8 +234,7 @@ func (w *Workspace) Subscribe(selector *Selector, listener Listener) (*Subscript
 		}
 
 		changes[0].kind = info.Kind()
-		ts := info.Tstamp()
-		changes[0].time = ts.Time()
+		changes[0].timestamp = info.Tstamp()
 
 		if w.useSubroutine {
 			go listener(changes)
@@ -258,7 +259,7 @@ func (w *Workspace) Unsubscribe(subid *SubscriptionID) error {
 	return nil
 }
 
-// RegisterEval registers an evaluation function with a Path
+// RegisterEval registers an "eval" function under the provided Path.
 func (w *Workspace) RegisterEval(path *Path, eval Eval) error {
 	p := w.toAbsolutePath(path)
 	logger := logger.WithField("path", p)
@@ -304,7 +305,9 @@ func (w *Workspace) RegisterEval(path *Path, eval Eval) error {
 	return nil
 }
 
-// UnregisterEval requests the evaluation of registered evals whose registration path matches the given selector
+// UnregisterEval unregisters a previously registered evaluation function.
+//
+// The path is the same that has been used for registration.
 func (w *Workspace) UnregisterEval(path *Path) error {
 	e, ok := w.evals[*path]
 	if ok {

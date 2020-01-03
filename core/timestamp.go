@@ -62,8 +62,8 @@ func (ts *Timestamp) Before(ots *Timestamp) bool {
 	return false
 }
 
-// String returns the Timestamp as a string
-func (ts *Timestamp) String() string {
+// ToString returns the Timestamp as a string
+func (ts *Timestamp) ToString() string {
 	clk := ts.ClockID()
 	s := ts.GoTime().In(time.UTC).Format(time.RFC3339Nano) + "/" + hex.EncodeToString(clk[:])
 	return s
