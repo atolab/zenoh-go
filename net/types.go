@@ -44,7 +44,7 @@ type ZError = zcore.ZError
 // Types and helpers
 //
 
-// Timestamp is a Zenoh timestamp
+// Timestamp is data structure representing a unique timestamp.
 type Timestamp = zcore.Timestamp
 
 // Session is the C session type
@@ -125,15 +125,24 @@ func (rs *RepliesSender) SendReplies(replies []Resource) {
 }
 
 // DataHandler will be called on reception of data matching the subscribed/stored resource.
-type DataHandler func(rkey string, data []byte, info *DataInfo)
+// 'ranme' is the resource name of the received data.
+// 'data' is the received data.
+// 'info' is the DataInfo associated with the received data.
+type DataHandler func(rname string, data []byte, info *DataInfo)
 
-// QueryHandler will be called on reception of query matching the stored/evaluated resource.
-// The QueryHandler must provide the data matching the resource selection 'rname' by calling
+// QueryHandler will be called on reception of query matching the stored/evaluated resource selection.
+// The QueryHandler must provide the data matching the resource 'rname' by calling
 // the 'sendReplies' function of the 'RepliesSender'. The 'sendReplies'
 // function MUST be called but accepts empty data array.
+// 'rname' is the resource name of the queried data.
+// 'predicate' is a string provided by the querier refining the data to be provided.
+// 'sendReplies' is a RepliesSender on which the 'sendReplies()' function MUST be called
+// with the provided data as argument.
 type QueryHandler func(rname string, predicate string, sendReplies *RepliesSender)
 
-// ReplyHandler will be called on reception of replies to a query.
+// ReplyHandler is a function to pass as argument to 'Session.Query()' or 'Session.QueryWO()'.
+// It will be called on reception of replies to the query sent by 'Session.Query()' or 'Session.QueryWO()'.
+// 'reply' is the actual reply.
 type ReplyHandler func(reply *ReplyValue)
 
 // SubMode is a Subscriber mode
@@ -163,7 +172,8 @@ func NewSubModeWithTime(kind SubModeKind, origin C.ulong, period C.ulong, durati
 	return SubMode{kind, C.zn_temporal_property_t{origin, period, duration}}
 }
 
-// QueryDest is a Query destination
+// QueryDest is a data structure defining which storages or evals should be destination of a query
+// (see Session.QueryWO())
 type QueryDest = C.zn_query_dest_t
 
 // QueryDestKind is the kind of a Query destination
@@ -190,29 +200,39 @@ func NewQueryDestWithNb(kind QueryDestKind, nb C.uint8_t) QueryDest {
 	return QueryDest{kind, nb}
 }
 
-// DataInfo is the information associated to a received data.
+// DataInfo contains meta informations about the associated data.
 type DataInfo = C.zn_data_info_t
 
-// Flags returns the flags from a DataInfo
-func (info *DataInfo) Flags() uint {
-	return uint(info.flags)
-}
+const (
+	znTSTAMP   = 0x10
+	znKIND     = 0x20
+	znENCODING = 0x40
+)
 
-// Tstamp returns the timestamp from a DataInfo
+// Tstamp returns the unique timestamp at which the data has been produced
 func (info *DataInfo) Tstamp() *Timestamp {
+	if (info.flags & znTSTAMP) == 0 {
+		return nil
+	}
 	// As CGO generates 2 different structs for C.z_timestamp_t in zenoh/core
 	// and zenoh/net packages, we need to do this unsafe.Pointer conversion.
 	// See https://github.com/golang/go/issues/13467
 	return (*Timestamp)(unsafe.Pointer(&info.tstamp))
 }
 
-// Encoding returns the encoding from a DataInfo
+// Encoding returns the encoding of the data.
 func (info *DataInfo) Encoding() uint8 {
+	if (info.flags & znENCODING) == 0 {
+		return 0
+	}
 	return uint8(info.encoding)
 }
 
-// Kind returns the kind from a DataInfo
+// Kind returns the kind of the data.
 func (info *DataInfo) Kind() uint8 {
+	if (info.flags & znKIND) == 0 {
+		return 0
+	}
 	return uint8(info.kind)
 }
 
@@ -232,37 +252,41 @@ const (
 	ZNReplyFinal ReplyKind = iota
 )
 
-// ReplyValue is a reply to a query
+// ReplyValue is a data structure containing one of the replies to a query (see ReplyHandler).
 type ReplyValue = C.zn_reply_value_t
 
-// Kind returns the Reply message kind
+// Kind returns the Reply message kind.
+// It can be one of the following: ZNStorageData, ZNStorageFinal, ZNEvalData, ZNEvalFinal or ZNReplyFinal.
 func (r *ReplyValue) Kind() ReplyKind {
 	return ReplyKind(r.kind)
 }
 
-// SrcID returns the unique id of the storage or eval that sent this reply
+// SrcID returns the unique identifier of the storage or eval that sent the reply when
+// Kind() equals ZNStorageData, ZNStorageFinal, ZNEvalData or ZNEvalFinal
 func (r *ReplyValue) SrcID() []byte {
 	return C.GoBytes(unsafe.Pointer(r.srcid), C.int(r.srcid_length))
 }
 
-// RSN returns the request sequence number
+// RSN returns the sequence number of the reply from the identified storage or eval
+// when Kind() equals ZNStorageData, ZNStorageFinal, ZNEvalData or ZNEvalFinal
 func (r *ReplyValue) RSN() uint64 {
 	return uint64(r.rsn)
 }
 
-// RName returns the resource name of this reply
+// RName returns the resource name of the received data
+// when Kind() equals ZNStorageData or ZNEvalData
 func (r *ReplyValue) RName() string {
 	return C.GoString(r.rname)
 }
 
-// Data returns the data of this reply, if the Reply message kind is ZN_STORAGE_DATA.
+// Data returns the received data when Kind() equals ZNStorageData or ZNEvalData.
 // Otherwise, it returns null
 func (r *ReplyValue) Data() []byte {
 	return C.GoBytes(unsafe.Pointer(r.data), C.int(r.data_length))
 }
 
-// Info returns the DataInfo associated to this reply
+// Info returns some meta information about the received data
+// when Kind() equals ZNStorageData or ZNEvalData.
 func (r *ReplyValue) Info() DataInfo {
 	return r.info
 }
-

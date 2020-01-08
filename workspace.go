@@ -5,6 +5,7 @@ import (
 	"strings"
 	"sync"
 
+	zcore "github.com/atolab/zenoh-go/core"
 	znet "github.com/atolab/zenoh-go/net"
 	log "github.com/sirupsen/logrus"
 )
@@ -120,7 +121,6 @@ func (w *Workspace) Get(selector *Selector) []Data {
 			data := reply.Data()
 			info := reply.Info()
 			encoding := info.Encoding()
-			ts := info.Tstamp()
 			if reply.Kind() == znet.ZNStorageData {
 				logger.WithFields(log.Fields{
 					"reply path": reply.RName(),
@@ -151,6 +151,11 @@ func (w *Workspace) Get(selector *Selector) []Data {
 					"error":      err,
 				}).Warn("Get : error decoding reply")
 				return
+			}
+			ts := info.Tstamp()
+			// @TODO: remove this when we're sure Data always come with a Timestamp.
+			if ts == nil {
+				ts = zcore.GenerateTimestamp()
 			}
 			d := Data{path, value, ts}
 			l, _ := qresults[*path]
