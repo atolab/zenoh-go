@@ -4,7 +4,7 @@
 project = 'zenoh-go'
 copyright = '2020, ATOLabs'
 author = 'ATOLabs'
-release = '0.4.0'
+release = '0.4.1'
 
 # -- General configuration ---------------------------------------------------
 master_doc = 'index'
