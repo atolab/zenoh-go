@@ -1,3 +1,20 @@
+/*
+ * Copyright (c) 2014, 2020 Contributors to the Eclipse Foundation
+ *
+ * See the NOTICE file(s) distributed with this work for additional
+ * information regarding copyright ownership.
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Eclipse Public License 2.0 which is available at
+ * http://www.eclipse.org/legal/epl-2.0, or the Apache License, Version 2.0
+ * which is available at https://www.apache.org/licenses/LICENSE-2.0.
+ *
+ * SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+ *
+ * Contributors: Julien Enoch, ADLINK Technology Inc.
+ * Initial implementation of Eclipse Zenoh.
+ */
+
 package core
 
 /*
@@ -15,10 +32,8 @@ import (
 	"unsafe"
 )
 
-
 // Timestamp is a data structure representing a unique timestamp.
 type Timestamp = C.z_timestamp_t
-
 
 // GenerateTimestamp creates a new timestamp with current time but with 0x00 as clock_id.
 // WARN: Don't use it, this is a temporary workaround.
@@ -26,7 +41,7 @@ type Timestamp = C.z_timestamp_t
 func GenerateTimestamp() *Timestamp {
 	ns := time.Now().UnixNano()
 	sec := C.ulong((ns / 1000000000) << 32)
-	frac := C.ulong(float32((ns % 1000000000) / 1000000000) * 0x100000000)
+	frac := C.ulong(float32((ns%1000000000)/1000000000) * 0x100000000)
 	ts := new(Timestamp)
 	ts.time = sec + frac
 	ts.clock_id = [16]C.uchar{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
@@ -85,4 +100,3 @@ func (ts *Timestamp) ToString() string {
 	s := ts.GoTime().In(time.UTC).Format(time.RFC3339Nano) + "/" + hex.EncodeToString(clk[:])
 	return s
 }
-

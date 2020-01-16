@@ -1,3 +1,20 @@
+/*
+ * Copyright (c) 2014, 2020 Contributors to the Eclipse Foundation
+ *
+ * See the NOTICE file(s) distributed with this work for additional
+ * information regarding copyright ownership.
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Eclipse Public License 2.0 which is available at
+ * http://www.eclipse.org/legal/epl-2.0, or the Apache License, Version 2.0
+ * which is available at https://www.apache.org/licenses/LICENSE-2.0.
+ *
+ * SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+ *
+ * Contributors: Julien Enoch, ADLINK Technology Inc.
+ * Initial implementation of Eclipse Zenoh.
+ */
+
 package zenoh
 
 import (
@@ -18,7 +35,7 @@ type Admin struct {
 // AddBackend adds a backend in the connected Zenoh router
 // (i.e. the one you are directly connected to).
 //
-// The backend will use the properties for initialization and "beid" as identifier. 
+// The backend will use the properties for initialization and "beid" as identifier.
 func (a *Admin) AddBackend(beid string, properties Properties) error {
 	return a.AddBackendAt(beid, properties, a.zenohid)
 }
@@ -26,7 +43,7 @@ func (a *Admin) AddBackend(beid string, properties Properties) error {
 // AddBackendAt adds a backend in the specified Zenoh router,
 // not necessarily the one you are connected to.
 //
-// The backend will use the properties for initialization and "beid" as identifier. 
+// The backend will use the properties for initialization and "beid" as identifier.
 func (a *Admin) AddBackendAt(beid string, properties Properties, zenoh string) error {
 	path, err := NewPath(fmt.Sprintf("/@/router/%s/plugin/storages/backend/%s", zenoh, beid))
 	if err != nil {
@@ -101,14 +118,14 @@ func (a *Admin) RemoveBackendAt(beid string, zenoh string) error {
 
 // AddStorage adds a storage in the connected Zenoh router, using an automatically chosen backend.
 //
-// The storage will use the properties for initialization and "stid" as identifier. 
+// The storage will use the properties for initialization and "stid" as identifier.
 func (a *Admin) AddStorage(stid string, properties Properties) error {
 	return a.AddStorageOnBackendAt(stid, properties, "auto", a.zenohid)
 }
 
 // AddStorageAt adds a storage in the specified Zenoh router, using an automatically chosen backend.
 //
-// The storage will use the properties for initialization and "stid" as identifier. 
+// The storage will use the properties for initialization and "stid" as identifier.
 func (a *Admin) AddStorageAt(stid string, properties Properties, zenoh string) error {
 	return a.AddStorageOnBackendAt(stid, properties, "auto", zenoh)
 }

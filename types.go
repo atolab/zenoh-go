@@ -1,3 +1,20 @@
+/*
+ * Copyright (c) 2014, 2020 Contributors to the Eclipse Foundation
+ *
+ * See the NOTICE file(s) distributed with this work for additional
+ * information regarding copyright ownership.
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Eclipse Public License 2.0 which is available at
+ * http://www.eclipse.org/legal/epl-2.0, or the Apache License, Version 2.0
+ * which is available at https://www.apache.org/licenses/LICENSE-2.0.
+ *
+ * SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+ *
+ * Contributors: Julien Enoch, ADLINK Technology Inc.
+ * Initial implementation of Eclipse Zenoh.
+ */
+
 package zenoh
 
 import (
@@ -97,25 +114,25 @@ func removeUselessSlashes(s string) string {
 // and associated Values.
 //
 // Structure of a selector:
-// 
+//
 //    /s1/s2/../sn?x>1&y<2&..&z=4(p1=v1;p2=v2;..;pn=vn)#a;x;y;..;z
 //    |          | |            | |                  |  |        |
 //    |-- expr --| |-- filter --| |--- properties ---|  |fragment|
-// 
+//
 // where:
-//   
+//
 // - expr: is a path expression. I.e. a string similar to a Path but with character '*'  allowed.
 // A single '*' matches any set of characters in a path, except '/'.
 // While `"**"` matches any set of characters in a path, including '/'.
 // A path expression can be absolute (i.e. starting with a '/') or relative to a Workspace.
-// 
+//
 // - filter: a list of predicates separated by '&' allowing to perform filtering on the Value
 // associated with the matching keys.
 // Each predicate has the form "`field``operator``value`" where:
 // -- `field` is the name of a field in the value (is applicable and is existing. otherwise the predicate is false).
 // -- `operator` is one of a comparison operators: `<` , `>` , `<=`  , `>=`  , `=`  , `!=`.
 // -- `value` is the the value to compare the field's value with.
-// 
+//
 // - fragment: a list of fields names allowing to return a sub-part of each value.
 // This feature only applies to structured values using a "self-describing" encoding, such as JSON or XML.
 // It allows to select only some fields within the structure. A new structure with only the selected fields
@@ -225,7 +242,7 @@ func (s *Selector) AddPrefix(prefix *Path) *Selector {
 ///////////////
 
 // Data is a zenoh data returned by a Workspace.get(selector) query.
-// 
+//
 // The Data objects are comparable according to their Timestamp.
 // Note that zenoh makes sure that each published path/value
 // has a unique timestamp accross the system.
@@ -271,10 +288,10 @@ const (
 // The Listener function that is registered in Workspace.subscribe(selector, listener)
 // will receive a list of Changes.
 type Change struct {
-	path  *Path
-	kind  ChangeKind
-	timestamp  *Timestamp
-	value Value
+	path      *Path
+	kind      ChangeKind
+	timestamp *Timestamp
+	value     Value
 }
 
 // Path returns the path impacted by the change
@@ -308,18 +325,18 @@ type Encoding = uint8
 // Known encodings:
 const (
 	// RAW: The value has a RAW encoding (i.e. it's a bytes buffer).
-	RAW        Encoding = 0x00
+	RAW Encoding = 0x00
 
 	// STRING: The value is an UTF-8 string.
-	STRING     Encoding = 0x02
+	STRING Encoding = 0x02
 
 	// PROPERTIES: The value if a list of keys/values, encoded as an UTF-8 string.
-    // The keys/values are separated by ';' character, and each key is separated
-    // from its associated value (if any) with a '=' character.
+	// The keys/values are separated by ';' character, and each key is separated
+	// from its associated value (if any) with a '=' character.
 	PROPERTIES Encoding = 0x03
 
 	// JSON The value is a JSON structure in an UTF-8 string.
-	JSON       Encoding = 0x04
+	JSON Encoding = 0x04
 )
 
 var valueDecoders = map[Encoding]ValueDecoder{}
