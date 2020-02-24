@@ -25,7 +25,7 @@ that gives access to the zenoh protocol primitives and allow some
 advanced use cases where a fine tuning of the protocol is required.
 
 
- * `zenoh API <https://godoc.org/github.com/atolab/zenoh-go>`_
- * `zenoh-net API <https://godoc.org/github.com/atolab/zenoh-go/net>`_
+ * `zenoh API <https://godoc.org/github.com/eclipse-zenoh/zenoh-go>`_
+ * `zenoh-net API <https://godoc.org/github.com/eclipse-zenoh/zenoh-go/net>`_
 
 

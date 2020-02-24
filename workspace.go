@@ -19,8 +19,8 @@ import (
 	"strings"
 	"sync"
 
-	zcore "github.com/atolab/zenoh-go/core"
-	znet "github.com/atolab/zenoh-go/net"
+	zcore "github.com/eclipse-zenoh/zenoh-go/core"
+	znet "github.com/eclipse-zenoh/zenoh-go/net"
 	log "github.com/sirupsen/logrus"
 )
 

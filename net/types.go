@@ -26,7 +26,7 @@ import "C"
 import (
 	"unsafe"
 
-	zcore "github.com/atolab/zenoh-go/core"
+	zcore "github.com/eclipse-zenoh/zenoh-go/core"
 )
 
 const (

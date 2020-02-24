@@ -20,8 +20,8 @@ import (
 	"strconv"
 	"strings"
 
-	zcore "github.com/atolab/zenoh-go/core"
-	znet "github.com/atolab/zenoh-go/net"
+	zcore "github.com/eclipse-zenoh/zenoh-go/core"
+	znet "github.com/eclipse-zenoh/zenoh-go/net"
 )
 
 // ZError reports an error that occurred in zenoh.

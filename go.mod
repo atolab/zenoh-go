@@ -12,7 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 
-module github.com/atolab/zenoh-go
+module github.com/eclipse-zenoh/zenoh-go
 
 go 1.12
 

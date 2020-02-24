@@ -3,7 +3,7 @@
 ## Prerequisites
 
    The [Zenoh](https://zenoh.io) C client library must be installed on your host.  
-   See installation instructions on https://zenoh.io or clone, build and install it yourself from https://github.com/atolab/zenoh-c.
+   See installation instructions on https://zenoh.io or clone, build and install it yourself from https://github.com/eclipse-zenoh/zenoh-c.
 
 ## Start instructions
    

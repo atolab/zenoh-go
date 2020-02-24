@@ -18,7 +18,7 @@ package zenoh
 import (
 	"encoding/hex"
 
-	znet "github.com/atolab/zenoh-go/net"
+	znet "github.com/eclipse-zenoh/zenoh-go/net"
 	log "github.com/sirupsen/logrus"
 )
 

@@ -19,7 +19,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/atolab/zenoh-go"
+	"github.com/eclipse-zenoh/zenoh-go"
 )
 
 const n = 100000

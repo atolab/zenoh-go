@@ -18,7 +18,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/atolab/zenoh-go"
+	"github.com/eclipse-zenoh/zenoh-go"
 )
 
 func main() {
