@@ -93,7 +93,7 @@ func ZOpen(locator *string, properties map[int][]byte) (*Zenoh, error) {
 
 	var l *C.char
 	if locator != nil {
-		l := C.CString(*locator)
+		l = C.CString(*locator)
 		defer C.free(unsafe.Pointer(l))
 	}
 
